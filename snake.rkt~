@@ -78,47 +78,22 @@
 ;; ======================
 ;; Grid Drawing
 ;; ======================
-;; Disegna le linee verticali ricorsivamente
-(define (draw-vlines i max scene)
-  (if (> i max)
-      scene
-      (draw-vlines
-       (add1 i) max
-       (add-line scene
-                 (* i CELL-SIZE) 0
-                 (* i CELL-SIZE) SCENE-HEIGHT
-                 "gray"))))
-
-;; Disegna le linee orizzontali ricorsivamente
-(define (draw-hlines i max scene)
-  (if (> i max)
-      scene
-      (draw-hlines
-       (add1 i) max
-       (add-line scene
-                 0 (* i CELL-SIZE)
-                 SCENE-WIDTH (* i CELL-SIZE)
-                 "gray"))))
-
-;; Versione finale di draw-grid
 (define (draw-grid scene)
-  (let* ([vertical (draw-vlines 0 WIDTH scene)]
-         [horizontal (draw-hlines 0 HEIGHT vertical)])
-    horizontal))
-
+  (let* ([scene-with-vlines
+          (foldr (lambda (i img)
+                   (add-line img (* i CELL-SIZE) 0 (* i CELL-SIZE) SCENE-HEIGHT "gray"))
+                 scene
+                 (build-list (add1 WIDTH) identity))]
+         [scene-with-hlines
+          (foldr (lambda (i img)
+                   (add-line img 0 (* i CELL-SIZE) SCENE-WIDTH (* i CELL-SIZE) "gray"))
+                 scene-with-vlines
+                 (build-list (add1 HEIGHT) identity))])
+    scene-with-hlines))
 
 ;; ======================
 ;; Rendering Snake Game
 ;; ======================
-(define (draw-tail tail scene)
-  (cond
-    [(empty? tail) scene]
-    [else
-     (place-image (rectangle 20 20 "solid" "green")
-                  (* (posn-x (first tail)) CELL-SIZE)
-                  (* (posn-y (first tail)) CELL-SIZE)
-                  (draw-tail (rest tail) scene))]))
-
 (define (render-game w)
   (let* ([inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
          [grid-scene (draw-grid inner-scene)]
@@ -129,7 +104,14 @@
               grid-scene
               (let* ([head (first snake-list)]
                      [tail (rest snake-list)]
-                     [scene-with-tail (draw-tail tail grid-scene)]
+                     [scene-with-tail
+                      (foldr (lambda (p img)
+                               (place-image (rectangle 20 20 "solid" "green")
+                                            (* (posn-x p) CELL-SIZE)
+                                            (* (posn-y p) CELL-SIZE)
+                                            img))
+                             grid-scene
+                             tail)]
                      [scene-with-head
                       (place-image (rectangle 20 20 "solid" "darkgreen")
                                    (* (posn-x head) CELL-SIZE)
