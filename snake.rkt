@@ -7,7 +7,7 @@
 ;; ======================
 ;; Menu speed variable
 ;; ======================
-(define game-speed 0.05)
+(define game-speed 0.10)
 (define-struct menu (speed))
 (define initial-menu (make-menu 0.05))
 
@@ -28,6 +28,25 @@
 ;; Button
 (define BUTTON-WIDTH 100)
 (define BUTTON-HEIGHT 30)
+
+;; Snake
+(define SNAKE-COLOR "darkgreen")
+(define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 (circle 10 "solid" "white")))
+(define SNAKE-HEAD (scale 0.5 (overlay/xy EYE -20 -25 (overlay/xy EYE 0 -25 (rotate 90(polygon (list (make-pulled-point 1/2 20 0 0 1/2 -20)
+                 (make-posn -10 20)
+                 (make-pulled-point 1/2 -20 60 0 1/2 20)
+                 (make-posn -10 -20))
+           "solid"
+           "darkgreen"))))))
+
+(define SNAKE-BODY (rectangle 13 20 "solid" SNAKE-COLOR))
+(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7(rectangle 13 13 "solid" SNAKE-COLOR))))
+(define FRUIT-CORE (circle 10 "solid" "red"))
+(define FRUIT-LEAF (ellipse 5 10 "solid" "green"))
+;;(define FRUIT-STEM (rectangle 2 7 "solid" "brown"))
+(define FRUIT 
+    (overlay/xy (rotate 45 FRUIT-LEAF) -4 3 FRUIT-CORE))
+
 
 ;; ======================
 ;; Data Structures
@@ -106,58 +125,65 @@
          [horizontal (draw-hlines 0 HEIGHT vertical)])
     horizontal))
 
-
 ;; ======================
 ;; Rendering Snake Game
 ;; ======================
+
+;; Draws the tail of the snake recursively
 (define (draw-tail tail scene)
   (cond
     [(empty? tail) scene]
     [else
-     (place-image (rectangle 20 20 "solid" "green")
+     (place-image SNAKE-BODY
                   (* (posn-x (first tail)) CELL-SIZE)
                   (* (posn-y (first tail)) CELL-SIZE)
                   (draw-tail (rest tail) scene))]))
 
-(define (render-game w)
-  (let* ([inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
-         [grid-scene (draw-grid inner-scene)]
-         [snake (world-snake w)]
-         [snake-list (vector->list snake)]
-         [scene-with-snake
-          (if (empty? snake-list)
-              grid-scene
-              (let* ([head (first snake-list)]
-                     [tail (rest snake-list)]
-                     [scene-with-tail (draw-tail tail grid-scene)]
-                     [scene-with-head
-                      (place-image (rectangle 20 20 "solid" "darkgreen")
-                                   (* (posn-x head) CELL-SIZE)
-                                   (* (posn-y head) CELL-SIZE)
-                                   scene-with-tail)])
-                scene-with-head))]
-         [food-img
-          (place-image (circle 10 "solid" "red")
-                       (* (posn-x (world-food w)) CELL-SIZE)
-                       (* (posn-y (world-food w)) CELL-SIZE)
-                       scene-with-snake)]
-         [final-inner
-          (if (world-game-over? w)
-              (overlay (text "Game Over" 24 "red") food-img)
-              food-img)]
+;; Draws the entire snake (head and tail) on the given scene
+(define (draw-snake snake scene)
+  (let ([snake-list (vector->list snake)])
+    (if (empty? snake-list)
+        scene
+        (let* ([head (first snake-list)]
+               [tail (rest snake-list)]
+               [scene-with-tail (draw-tail tail scene)]
+               [scene-with-head
+                (place-image SNAKE-HEAD
+                             (* (posn-x head) CELL-SIZE)
+                             (* (posn-y head) CELL-SIZE)
+                             scene-with-tail)])
+          scene-with-head))))
 
-         ;; Score bar
-         [score-text (text (string-append "Score: " (number->string (world-score w))) 18 "white")]
-         [record-text (text (string-append "Record: " (number->string (world-record w))) 18 "yellow")]
+;; Draws the food on the given scene
+(define (draw-food food scene)
+  (place-image FRUIT
+               (* (posn-x food) CELL-SIZE)
+               (* (posn-y food) CELL-SIZE)
+               scene))
+
+;; Creates the score bar with score, record, and restart button
+(define (create-score-bar score record)
+  (let* ([score-text (text (string-append "Score: " (number->string score)) 18 "white")]
+         [record-text (text (string-append "Record: " (number->string record)) 18 "yellow")]
          [button-bg (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray")]
          [button-label (text "Restart" 16 "black")]
          [button (overlay button-label button-bg)]
-         [score-area (rectangle SCENE-WIDTH TOP-BORDER-SIZE "solid" "black")]
-         [score-bar
-          (place-image score-text 80 (/ TOP-BORDER-SIZE 2)
-            (place-image record-text (- SCENE-WIDTH 100) (/ TOP-BORDER-SIZE 2)
-              (place-image button (/ SCENE-WIDTH 2) (/ TOP-BORDER-SIZE 2) score-area)))]
-         ;; Outer frame
+         [score-area (rectangle SCENE-WIDTH TOP-BORDER-SIZE "solid" "black")])
+    (place-image score-text 80 (/ TOP-BORDER-SIZE 2)
+      (place-image record-text (- SCENE-WIDTH 100) (/ TOP-BORDER-SIZE 2)
+        (place-image button (/ SCENE-WIDTH 2) (/ TOP-BORDER-SIZE 2) score-area)))))
+
+;; Main render function for the game
+(define (render-game w)
+  (let* ([inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
+         [grid-scene (draw-grid inner-scene)]
+         [scene-with-snake (draw-snake (world-snake w) grid-scene)]
+         [scene-with-food (draw-food (world-food w) scene-with-snake)]
+         [final-inner
+          (if (world-game-over? w)
+              (overlay (text "Game Over" 24 "red") scene-with-food)
+              scene-with-food)]
+         [score-bar (create-score-bar (world-score w) (world-record w))]
          [outer (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black")]
          [scene-with-grid
           (place-image final-inner
@@ -165,7 +191,6 @@
                        (+ TOP-BORDER-SIZE (/ SCENE-HEIGHT 2))
                        (overlay/align "center" "top" score-bar outer))])
     scene-with-grid))
-
 ;; ======================
 ;; Rendering Menu
 ;; ======================
