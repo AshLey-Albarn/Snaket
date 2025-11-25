@@ -39,14 +39,22 @@
            SNAKE-COLOR))))))
 
 (define SNAKE-BODY (rectangle 13 20 "solid" SNAKE-COLOR))
-(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7(rectangle 13 13 "solid" SNAKE-COLOR))))
+(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" "red") -7 -7 (overlay/xy (rectangle 13 13 "solid" "red") 0 7(rectangle 13 13 "solid" "red"))))
+(define SNAKE-BODY-ANGLE1 (overlay/xy (rectangle 13 13 "solid" "orange") -7 -7 (overlay/xy (rectangle 13 13 "solid" "orange") 0 7(rectangle 13 13 "solid" "orange"))))
+
 (define FRUIT-CORE (circle 10 "solid" "red"))
 (define FRUIT-LEAF (ellipse 5 10 "solid" "green"))
-;;(define FRUIT-STEM (rectangle 2 7 "solid" "brown"))
 (define FRUIT 
     (overlay/xy (rotate 45 FRUIT-LEAF) -4 3 FRUIT-CORE))
 
-
+"0:"
+SNAKE-BODY-ANGLE
+"90:"
+(rotate 90 SNAKE-BODY-ANGLE)
+"180:"
+(rotate 180 SNAKE-BODY-ANGLE)
+"270:"
+(rotate 270 SNAKE-BODY-ANGLE)
 ;; ======================
 ;; Data Structures
 ;; ======================
@@ -101,23 +109,83 @@
           [(= dy 0) (if (< dx 0) 'left 'right)]
           [else 'none]))) ; shouldn't happen in snake movement
 
+;; ============================================
+;; ADDED HELPERS FOR TURN DETECTION
+;; ============================================
+(define (vertical? d)
+  (or (eq? d 'up) (eq? d 'down)))
+
+(define (horizontal? d)
+  (or (eq? d 'left) (eq? d 'right)))
+
+(define (turn? a b c)
+  (let* ([d1 (direction a b)]
+         [d2 (direction b c)])
+    (or (and (vertical? d1) (horizontal? d2))
+        (and (horizontal? d1) (vertical? d2)))))
+
+
+;; Replace previous corner-image with this fixed mapping (unordered pairs)
+(define (corner-image a b c)
+  (let ([d1 (direction a b)]
+        [d2 (direction b c)])
+    (cond
+      ;; up → right
+      [(and (eq? d1 'up) (eq? d2 'right))
+       (rotate 270 SNAKE-BODY-ANGLE)]
+
+      ;; right → up v
+      [(and (eq? d1 'right) (eq? d2 'up))
+       (rotate 90 SNAKE-BODY-ANGLE)]
+
+      ;; right → down vf
+      [(and (eq? d1 'right) (eq? d2 'down))
+       (rotate 0 SNAKE-BODY-ANGLE)]
+
+      ;; down → right
+      [(and (eq? d1 'down) (eq? d2 'right))
+       (rotate 180 SNAKE-BODY-ANGLE)]
+
+      ;; down → left
+      [(and (eq? d1 'down) (eq? d2 'left))
+       (rotate 90 SNAKE-BODY-ANGLE)]
+
+      ;; left → down v
+      [(and (eq? d1 'left) (eq? d2 'down))
+       (rotate 270 SNAKE-BODY-ANGLE)]
+
+      ;; left → up
+      [(and (eq? d1 'left) (eq? d2 'up))
+       (rotate 0 SNAKE-BODY-ANGLE)]
+
+      ;; up → left v 
+      [(and (eq? d1 'up) (eq? d2 'left))
+       (rotate 180 SNAKE-BODY-ANGLE)]
+
+      [else SNAKE-BODY])))
+
+
+
+;; ============================================
+;; END OF ADDED TURN LOGIC
+;; ============================================
+
 ;; New helper: get body image based on direction
 (define (get-body-image dir)
   (cond [(or (symbol=? dir 'up) (symbol=? dir 'down)) SNAKE-BODY]
         [(or (symbol=? dir 'left) (symbol=? dir 'right)) (rotate 90 SNAKE-BODY)]))
 
-;; New helper: get head image based on direction (assuming SNAKE-HEAD faces right by default)
+;; New helper: get head image based on direction
 (define (get-head-image dir)
   (cond [(symbol=? dir 'right) (rotate 270 SNAKE-HEAD)]
         [(symbol=? dir 'down) (rotate 180 SNAKE-HEAD)]
         [(symbol=? dir 'left)(rotate 90 SNAKE-HEAD)]
         [(symbol=? dir 'up) SNAKE-HEAD]
-        [else (rotate 270 SNAKE-HEAD)])) ; for 'none or others, default to right
+        [else (rotate 270 SNAKE-HEAD)]))
 
 ;; ======================
 ;; Grid Drawing
 ;; ======================
-;; Disegna le linee verticali ricorsivamente
 (define (draw-vlines i max scene)
   (if (> i max)
       scene
@@ -128,7 +196,6 @@
                  (* i CELL-SIZE) SCENE-HEIGHT
                  "gray"))))
 
-;; Disegna le linee orizzontali ricorsivamente
 (define (draw-hlines i max scene)
   (if (> i max)
       scene
@@ -139,7 +206,6 @@
                  SCENE-WIDTH (* i CELL-SIZE)
                  "gray"))))
 
-;; Versione finale di draw-grid
 (define (draw-grid scene)
   (let* ([vertical (draw-vlines 0 WIDTH scene)]
          [horizontal (draw-hlines 0 HEIGHT vertical)])
@@ -149,20 +215,39 @@
 ;; Rendering Snake Game
 ;; ======================
 
-;; Draws the tail of the snake recursively, now with rotation based on direction
+;; ======================
+;; REPLACED draw-tail WITH TURN DETECTION
+;; ======================
 (define (draw-tail prev tail scene)
   (cond
     [(empty? tail) scene]
-    [else
-     (let* ([current (first tail)]
-            [dir (direction prev current)]
-            [body-img (get-body-image dir)])
-       (place-image body-img
-                    (* (posn-x current) CELL-SIZE)
-                    (* (posn-y current) CELL-SIZE)
-                    (draw-tail current (rest tail) scene)))]))
 
-;; Draws the entire snake (head and tail) on the given scene, now with head rotation
+    ;; last
+    [(empty? (rest tail))
+     (let* ([cur (first tail)]
+            [dir (direction prev cur)])
+       (place-image (get-body-image dir)
+                    (* (posn-x cur) CELL-SIZE)
+                    (* (posn-y cur) CELL-SIZE)
+                    scene))]
+
+    ;; turn or straight
+    [else
+     (let* ([cur (first tail)]
+            [nxt (second tail)]
+            [img (if (turn? prev cur nxt)
+                     (corner-image prev cur nxt)
+                     (get-body-image (direction prev cur)))]
+            [new-scene
+             (place-image img
+                          (* (posn-x cur) CELL-SIZE)
+                          (* (posn-y cur) CELL-SIZE)
+                          scene)])
+       (draw-tail cur (rest tail) new-scene))]))
+;; ======================
+;; END OF draw-tail PATCH
+;; ======================
+
 (define (draw-snake snake dir scene)
   (let ([snake-list (vector->list snake)])
     (if (empty? snake-list)
@@ -178,14 +263,14 @@
                              scene-with-tail)])
           scene-with-head))))
 
-;; Draws the food on the given scene
+;; Draw food
 (define (draw-food food scene)
   (place-image FRUIT
                (* (posn-x food) CELL-SIZE)
                (* (posn-y food) CELL-SIZE)
                scene))
 
-;; Creates the score bar with score, record, and restart button
+;; Score bar
 (define (create-score-bar score record)
   (let* ([score-text (text (string-append "Score: " (number->string score)) 18 "white")]
          [record-text (text (string-append "Record: " (number->string record)) 18 "yellow")]
@@ -197,7 +282,6 @@
       (place-image record-text (- SCENE-WIDTH 100) (/ TOP-BORDER-SIZE 2)
         (place-image button (/ SCENE-WIDTH 2) (/ TOP-BORDER-SIZE 2) score-area)))))
 
-;; Main render function for the game
 (define (render-game w)
   (let* ([inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
          [grid-scene (draw-grid inner-scene)]
@@ -215,6 +299,7 @@
                        (+ TOP-BORDER-SIZE (/ SCENE-HEIGHT 2))
                        (overlay/align "center" "top" score-bar outer))])
     scene-with-grid))
+
 ;; ======================
 ;; Rendering Menu
 ;; ======================
@@ -249,7 +334,7 @@
         [snake (world-snake w)])
     
     (if (symbol=? dir 'none)
-        ;; Prima direzione: sempre 'right'
+        ;; first direction always right
         (make-world 'game (world-menu w) snake 'right (world-food w)
                     (world-game-over? w) (world-score w) (world-record w)
                     (world-tick-counter w))
@@ -281,43 +366,34 @@
 
           [else w]))))
 
-
-;; handle-key-unified aggiornato — non usa più game-speed globale
 (define (handle-key-unified w key)
   (cond
-    ;; Menu: cambia velocità o avvia il gioco
     [(symbol=? (world-mode w) 'menu)
      (cond
        [(key=? key " ")
-        ;; Avvia il gioco: usa la velocità scelta nel menu (memorizzata in world-menu)
-        ;; inizializziamo tick-counter a 0
         (make-world
          'game
-         (world-menu w)             ; menu (con la speed scelta)
-         initial-snake              ; snake
-         initial-dir                ; dir
-         (random-food initial-snake); food
-         #f                         ; game-over?
-         0                          ; score
-         (world-record w)           ; record (manteniamo quello esistente)
-         0)]                        ; tick-counter
+         (world-menu w)
+         initial-snake
+         initial-dir
+         (random-food initial-snake)
+         #f
+         0
+         (world-record w)
+         0)]
        [else
-        ;; Gestione delle frecce su/giù nel menu (aggiorna il menu)
         (make-world
          'menu
-         (menu-key (world-menu w) key) ; nuovo menu aggiornato
+         (menu-key (world-menu w) key)
          (world-snake w)
          (world-dir w)
          (world-food w)
          (world-game-over? w)
          (world-score w)
          (world-record w)
-         (world-tick-counter w))])]     ; mantieni tick-counter attuale
-    ;; Se siamo in game, delega a handle-key-game
+         (world-tick-counter w))])]
     [(symbol=? (world-mode w) 'game)
      (handle-key-game w key)]))
-
-
 
 ;; ======================
 ;; Tick Handler
@@ -332,13 +408,11 @@
             [threshold (inexact->exact (round (/ speed 0.02)))])
 
        (if (< counter threshold)
-           ;; → NON muovere ancora il serpente, solo incrementa
            (make-world 'game (world-menu w) (world-snake w)
                        (world-dir w) (world-food w)
                        #f (world-score w) (world-record w)
                        (add1 counter))
 
-           ;; → MUOVI IL SERPENTE ORA
            (let* ([snake (world-snake w)]
                   [dir (world-dir w)]
                   [food (world-food w)]
@@ -351,25 +425,20 @@
                   [ate? (equal? new-head food)])
 
              (if ate?
-                 ;; mangia
                  (let* ([new-score (+ score 1)]
                         [new-record (max record new-score)]
                         [new-food (random-food (list->vector new-snake))])
                    (make-world 'game (world-menu w) (list->vector new-snake)
                                dir new-food #f new-score new-record 0))
 
-                 ;; non mangia → restringi la coda
                  (let ([shrunk (reverse (rest (reverse new-snake)))])
                    (if (or (wall-collision? new-head)
                            (self-collision? new-head (list->vector shrunk)))
-                       ;; game over
                        (make-world 'game (world-menu w) snake dir food
                                    #t score record 0)
-                       ;; continua
                        (make-world 'game (world-menu w)
                                    (list->vector shrunk) dir food
                                    #f score record 0)))))))]))
-
 
 (define (update-unified w)
   (if (symbol=? (world-mode w) 'game)
