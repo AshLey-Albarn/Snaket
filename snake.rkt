@@ -7,7 +7,6 @@
 ;; ======================
 ;; Menu speed variable
 ;; ======================
-(define game-speed 0.10)
 (define-struct menu (speed))
 (define initial-menu (make-menu 0.05))
 
@@ -37,7 +36,7 @@
                  (make-pulled-point 1/2 -20 60 0 1/2 20)
                  (make-posn -10 -20))
            "solid"
-           "darkgreen"))))))
+           SNAKE-COLOR))))))
 
 (define SNAKE-BODY (rectangle 13 20 "solid" SNAKE-COLOR))
 (define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7(rectangle 13 13 "solid" SNAKE-COLOR))))
@@ -51,7 +50,7 @@
 ;; ======================
 ;; Data Structures
 ;; ======================
-(define-struct world (mode menu snake dir food game-over? score record))
+(define-struct world (mode menu snake dir food game-over? score record tick-counter))
 
 ;; ======================
 ;; Initial Game Data
@@ -202,7 +201,7 @@
     (text "Usa FRECCIA SU/GIÙ per cambiare" 18 "lightgray")
     (/ TOTAL-WIDTH 2) 140
     (place-image
-     (text (string-append "Velocità attuale: " (number->string (menu-speed m)))
+     (text (string-append "Velocità attuale: " (number->string (exact->inexact (menu-speed m))))
            20 "yellow")
      (/ TOTAL-WIDTH 2) 200
      (place-image
@@ -221,74 +220,131 @@
         [else m]))
 
 (define (handle-key-game w key)
-  (let ([dir (world-dir w)] [snake (world-snake w)])
+  (let ([dir (world-dir w)]
+        [snake (world-snake w)])
+    
     (if (symbol=? dir 'none)
+        ;; Prima direzione: sempre 'right'
         (make-world 'game (world-menu w) snake 'right (world-food w)
-                    (world-game-over? w) (world-score w) (world-record w))
-        (cond [(key=? key "up")
-               (if (symbol=? dir 'down) w
-                   (make-world 'game (world-menu w) snake 'up (world-food w)
-                               (world-game-over? w) (world-score w) (world-record w)))]
-              [(key=? key "down")
-               (if (symbol=? dir 'up) w
-                   (make-world 'game (world-menu w) snake 'down (world-food w)
-                               (world-game-over? w) (world-score w) (world-record w)))]
-              [(key=? key "left")
-               (if (symbol=? dir 'right) w
-                   (make-world 'game (world-menu w) snake 'left (world-food w)
-                               (world-game-over? w) (world-score w) (world-record w)))]
-              [(key=? key "right")
-               (if (symbol=? dir 'left) w
-                   (make-world 'game (world-menu w) snake 'right (world-food w)
-                               (world-game-over? w) (world-score w) (world-record w)))]
-              [else w]))))
+                    (world-game-over? w) (world-score w) (world-record w)
+                    (world-tick-counter w))
 
+        (cond
+          [(key=? key "up")
+           (if (symbol=? dir 'down) w
+               (make-world 'game (world-menu w) snake 'up (world-food w)
+                           (world-game-over? w) (world-score w) (world-record w)
+                           (world-tick-counter w)))]
+
+          [(key=? key "down")
+           (if (symbol=? dir 'up) w
+               (make-world 'game (world-menu w) snake 'down (world-food w)
+                           (world-game-over? w) (world-score w) (world-record w)
+                           (world-tick-counter w)))]
+
+          [(key=? key "left")
+           (if (symbol=? dir 'right) w
+               (make-world 'game (world-menu w) snake 'left (world-food w)
+                           (world-game-over? w) (world-score w) (world-record w)
+                           (world-tick-counter w)))]
+
+          [(key=? key "right")
+           (if (symbol=? dir 'left) w
+               (make-world 'game (world-menu w) snake 'right (world-food w)
+                           (world-game-over? w) (world-score w) (world-record w)
+                           (world-tick-counter w)))]
+
+          [else w]))))
+
+
+;; handle-key-unified aggiornato — non usa più game-speed globale
 (define (handle-key-unified w key)
   (cond
+    ;; Menu: cambia velocità o avvia il gioco
     [(symbol=? (world-mode w) 'menu)
      (cond
        [(key=? key " ")
-        (begin
-          (set! game-speed (menu-speed (world-menu w)))
-          (make-world 'game (world-menu w)
-                      initial-snake initial-dir (random-food initial-snake)
-                      #f 0 (world-record w)))]
+        ;; Avvia il gioco: usa la velocità scelta nel menu (memorizzata in world-menu)
+        ;; inizializziamo tick-counter a 0
+        (make-world
+         'game
+         (world-menu w)             ; menu (con la speed scelta)
+         initial-snake              ; snake
+         initial-dir                ; dir
+         (random-food initial-snake); food
+         #f                         ; game-over?
+         0                          ; score
+         (world-record w)           ; record (manteniamo quello esistente)
+         0)]                        ; tick-counter
        [else
-        (make-world 'menu (menu-key (world-menu w) key)
-                    (world-snake w) (world-dir w) (world-food w)
-                    (world-game-over? w) (world-score w) (world-record w))])]
+        ;; Gestione delle frecce su/giù nel menu (aggiorna il menu)
+        (make-world
+         'menu
+         (menu-key (world-menu w) key) ; nuovo menu aggiornato
+         (world-snake w)
+         (world-dir w)
+         (world-food w)
+         (world-game-over? w)
+         (world-score w)
+         (world-record w)
+         (world-tick-counter w))])]     ; mantieni tick-counter attuale
+    ;; Se siamo in game, delega a handle-key-game
     [(symbol=? (world-mode w) 'game)
      (handle-key-game w key)]))
+
 
 
 ;; ======================
 ;; Tick Handler
 ;; ======================
 (define (update-game w)
-  (if (or (world-game-over? w)
-          (symbol=? (world-dir w) 'none))
-      w
-      (let* ([snake (world-snake w)]
-             [dir (world-dir w)]
-             [food (world-food w)]
-             [score (world-score w)]
-             [record (world-record w)]
-             [head (vector-ref snake 0)]
-             [new-head (move-head head dir)]
-             [snake-list (vector->list snake)]
-             [new-snake (cons new-head snake-list)]
-             [ate? (equal? new-head food)])
-        (if ate?
-            (let* ([new-score (+ score 1)]
-                   [new-record (max record new-score)]
-                   [new-food (random-food (list->vector new-snake))])
-              (make-world 'game (world-menu w) (list->vector new-snake) dir new-food
-                          #f new-score new-record))
-            (let ([shrunk (reverse (rest (reverse new-snake)))])
-              (if (or (wall-collision? new-head)
-                      (self-collision? new-head (list->vector shrunk)))
-                  (make-world 'game (world-menu w) snake dir food #t score record)
-                  (make-world 'game (world-menu w) (list->vector shrunk) dir food #f score record)))))))
+  (cond
+    [(world-game-over? w) w]
+    [(symbol=? (world-dir w) 'none) w]
+    [else
+     (let* ([speed (menu-speed (world-menu w))]
+            [counter (world-tick-counter w)]
+            [threshold (inexact->exact (round (/ speed 0.02)))])
+
+       (if (< counter threshold)
+           ;; → NON muovere ancora il serpente, solo incrementa
+           (make-world 'game (world-menu w) (world-snake w)
+                       (world-dir w) (world-food w)
+                       #f (world-score w) (world-record w)
+                       (add1 counter))
+
+           ;; → MUOVI IL SERPENTE ORA
+           (let* ([snake (world-snake w)]
+                  [dir (world-dir w)]
+                  [food (world-food w)]
+                  [score (world-score w)]
+                  [record (world-record w)]
+                  [head (vector-ref snake 0)]
+                  [new-head (move-head head dir)]
+                  [snake-list (vector->list snake)]
+                  [new-snake (cons new-head snake-list)]
+                  [ate? (equal? new-head food)])
+
+             (if ate?
+                 ;; mangia
+                 (let* ([new-score (+ score 1)]
+                        [new-record (max record new-score)]
+                        [new-food (random-food (list->vector new-snake))])
+                   (make-world 'game (world-menu w) (list->vector new-snake)
+                               dir new-food #f new-score new-record 0))
+
+                 ;; non mangia → restringi la coda
+                 (let ([shrunk (reverse (rest (reverse new-snake)))])
+                   (if (or (wall-collision? new-head)
+                           (self-collision? new-head (list->vector shrunk)))
+                       ;; game over
+                       (make-world 'game (world-menu w) snake dir food
+                                   #t score record 0)
+                       ;; continua
+                       (make-world 'game (world-menu w)
+                                   (list->vector shrunk) dir food
+                                   #f score record 0)))))))]))
+
 
 (define (update-unified w)
   (if (symbol=? (world-mode w) 'game)
@@ -307,7 +363,7 @@
            (<= y BUTTON-HEIGHT))
       (make-world 'game (world-menu w)
                   initial-snake initial-dir (random-food initial-snake)
-                  #f 0 (world-record w))
+                  #f 0 (world-record w) 0)
       w))
 
 ;; ======================
@@ -323,13 +379,13 @@
 ;; ======================
 (define initial-world
   (make-world 'menu initial-menu
-              initial-snake initial-dir initial-food #f initial-score initial-record))
+              initial-snake initial-dir initial-food #f initial-score initial-record 0))
 
 ;; ======================
 ;; Run Big-Bang
 ;; ======================
 (big-bang initial-world
   [to-draw render-unified]
-  [on-tick update-unified game-speed]
+  [on-tick update-unified 0.02]
   [on-key handle-key-unified]
   [on-mouse handle-mouse-unified])
