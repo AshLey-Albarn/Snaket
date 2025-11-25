@@ -93,6 +93,27 @@
         (random-food snake)
         p)))
 
+;; New helper: get direction between two positions
+(define (direction from to)
+  (let ([dx (- (posn-x to) (posn-x from))]
+        [dy (- (posn-y to) (posn-y from))])
+    (cond [(= dx 0) (if (< dy 0) 'up 'down)]
+          [(= dy 0) (if (< dx 0) 'left 'right)]
+          [else 'none]))) ; shouldn't happen in snake movement
+
+;; New helper: get body image based on direction
+(define (get-body-image dir)
+  (cond [(or (symbol=? dir 'up) (symbol=? dir 'down)) SNAKE-BODY]
+        [(or (symbol=? dir 'left) (symbol=? dir 'right)) (rotate 90 SNAKE-BODY)]))
+
+;; New helper: get head image based on direction (assuming SNAKE-HEAD faces right by default)
+(define (get-head-image dir)
+  (cond [(symbol=? dir 'right) (rotate 270 SNAKE-HEAD)]
+        [(symbol=? dir 'down) (rotate 180 SNAKE-HEAD)]
+        [(symbol=? dir 'left)(rotate 90 SNAKE-HEAD)]
+        [(symbol=? dir 'up) SNAKE-HEAD]
+        [else (rotate 270 SNAKE-HEAD)])) ; for 'none or others, default to right
+
 ;; ======================
 ;; Grid Drawing
 ;; ======================
@@ -128,26 +149,30 @@
 ;; Rendering Snake Game
 ;; ======================
 
-;; Draws the tail of the snake recursively
-(define (draw-tail tail scene)
+;; Draws the tail of the snake recursively, now with rotation based on direction
+(define (draw-tail prev tail scene)
   (cond
     [(empty? tail) scene]
     [else
-     (place-image SNAKE-BODY
-                  (* (posn-x (first tail)) CELL-SIZE)
-                  (* (posn-y (first tail)) CELL-SIZE)
-                  (draw-tail (rest tail) scene))]))
+     (let* ([current (first tail)]
+            [dir (direction prev current)]
+            [body-img (get-body-image dir)])
+       (place-image body-img
+                    (* (posn-x current) CELL-SIZE)
+                    (* (posn-y current) CELL-SIZE)
+                    (draw-tail current (rest tail) scene)))]))
 
-;; Draws the entire snake (head and tail) on the given scene
-(define (draw-snake snake scene)
+;; Draws the entire snake (head and tail) on the given scene, now with head rotation
+(define (draw-snake snake dir scene)
   (let ([snake-list (vector->list snake)])
     (if (empty? snake-list)
         scene
         (let* ([head (first snake-list)]
                [tail (rest snake-list)]
-               [scene-with-tail (draw-tail tail scene)]
+               [scene-with-tail (draw-tail head tail scene)]
+               [head-img (get-head-image dir)]
                [scene-with-head
-                (place-image SNAKE-HEAD
+                (place-image head-img
                              (* (posn-x head) CELL-SIZE)
                              (* (posn-y head) CELL-SIZE)
                              scene-with-tail)])
@@ -176,7 +201,7 @@
 (define (render-game w)
   (let* ([inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
          [grid-scene (draw-grid inner-scene)]
-         [scene-with-snake (draw-snake (world-snake w) grid-scene)]
+         [scene-with-snake (draw-snake (world-snake w) (world-dir w) grid-scene)]
          [scene-with-food (draw-food (world-food w) scene-with-snake)]
          [final-inner
           (if (world-game-over? w)
