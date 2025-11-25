@@ -39,22 +39,18 @@
            SNAKE-COLOR))))))
 
 (define SNAKE-BODY (rectangle 13 20 "solid" SNAKE-COLOR))
-(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" "red") -7 -7 (overlay/xy (rectangle 13 13 "solid" "red") 0 7(rectangle 13 13 "solid" "red"))))
-(define SNAKE-BODY-ANGLE1 (overlay/xy (rectangle 13 13 "solid" "orange") -7 -7 (overlay/xy (rectangle 13 13 "solid" "orange") 0 7(rectangle 13 13 "solid" "orange"))))
+(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" (make-color 0 0 0 0)) 7 -7 (overlay/xy (rectangle 13 13 "solid" (make-color 0 0 0 0)) 0 -14 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7(rectangle 13 13 "solid" SNAKE-COLOR))))))
+
 
 (define FRUIT-CORE (circle 10 "solid" "red"))
 (define FRUIT-LEAF (ellipse 5 10 "solid" "green"))
 (define FRUIT 
     (overlay/xy (rotate 45 FRUIT-LEAF) -4 3 FRUIT-CORE))
 
-"0:"
 SNAKE-BODY-ANGLE
-"90:"
-(rotate 90 SNAKE-BODY-ANGLE)
-"180:"
-(rotate 180 SNAKE-BODY-ANGLE)
-"270:"
-(rotate 270 SNAKE-BODY-ANGLE)
+
+(make-color 0 0 0 0)
+  
 ;; ======================
 ;; Data Structures
 ;; ======================
@@ -127,42 +123,27 @@ SNAKE-BODY-ANGLE
 
 ;; Replace previous corner-image with this fixed mapping (unordered pairs)
 (define (corner-image a b c)
-  (let ([d1 (direction a b)]
-        [d2 (direction b c)])
+  (let* ([d1 (direction a b)]
+         [d2 (direction b c)])
     (cond
-      ;; up → right
-      [(and (eq? d1 'up) (eq? d2 'right))
+      [(or (and (eq? d1 'up) (eq? d2 'right))
+           (and (eq? d1 'left) (eq? d2 'down)))
        (rotate 270 SNAKE-BODY-ANGLE)]
 
-      ;; right → up v
-      [(and (eq? d1 'right) (eq? d2 'up))
+      [(or (and (eq? d1 'right) (eq? d2 'up))
+           (and (eq? d1 'down)  (eq? d2 'left)))
        (rotate 90 SNAKE-BODY-ANGLE)]
 
-      ;; right → down vf
-      [(and (eq? d1 'right) (eq? d2 'down))
-       (rotate 0 SNAKE-BODY-ANGLE)]
-
-      ;; down → right
-      [(and (eq? d1 'down) (eq? d2 'right))
+      [(or (and (eq? d1 'right) (eq? d2 'down))
+           (and (eq? d1 'up)    (eq? d2 'left)))
        (rotate 180 SNAKE-BODY-ANGLE)]
 
-      ;; down → left
-      [(and (eq? d1 'down) (eq? d2 'left))
-       (rotate 90 SNAKE-BODY-ANGLE)]
-
-      ;; left → down v
-      [(and (eq? d1 'left) (eq? d2 'down))
-       (rotate 270 SNAKE-BODY-ANGLE)]
-
-      ;; left → up
-      [(and (eq? d1 'left) (eq? d2 'up))
+      [(or (and (eq? d1 'down) (eq? d2 'right))
+           (and (eq? d1 'left) (eq? d2 'up)))
        (rotate 0 SNAKE-BODY-ANGLE)]
-
-      ;; up → left v 
-      [(and (eq? d1 'up) (eq? d2 'left))
-       (rotate 180 SNAKE-BODY-ANGLE)]
 
       [else SNAKE-BODY])))
+
 
 
 
