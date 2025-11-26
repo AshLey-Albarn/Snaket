@@ -28,7 +28,9 @@
 (define BUTTON-WIDTH 100)
 (define BUTTON-HEIGHT 30)
 
-;; Snake
+;; Graphics
+
+(define GRID-COLOR "gray")
 (define SNAKE-COLOR "darkgreen")
 (define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 (circle 10 "solid" "white")))
 (define SNAKE-HEAD (scale 0.5 (overlay/xy EYE -20 -25 (overlay/xy EYE 0 -25 (rotate 90(polygon (list (make-pulled-point 1/2 20 0 0 1/2 -20)
@@ -46,10 +48,6 @@
 (define FRUIT-LEAF (ellipse 5 10 "solid" "green"))
 (define FRUIT 
     (overlay/xy (rotate 45 FRUIT-LEAF) -4 3 FRUIT-CORE))
-
-SNAKE-BODY-ANGLE
-
-(make-color 0 0 0 0)
   
 ;; ======================
 ;; Data Structures
@@ -97,13 +95,12 @@ SNAKE-BODY-ANGLE
         (random-food snake)
         p)))
 
-;; New helper: get direction between two positions
 (define (direction from to)
   (let ([dx (- (posn-x to) (posn-x from))]
         [dy (- (posn-y to) (posn-y from))])
     (cond [(= dx 0) (if (< dy 0) 'up 'down)]
           [(= dy 0) (if (< dx 0) 'left 'right)]
-          [else 'none]))) ; shouldn't happen in snake movement
+          [else 'none])))
 
 ;; ============================================
 ;; ADDED HELPERS FOR TURN DETECTION
@@ -120,8 +117,6 @@ SNAKE-BODY-ANGLE
     (or (and (vertical? d1) (horizontal? d2))
         (and (horizontal? d1) (vertical? d2)))))
 
-
-;; Replace previous corner-image with this fixed mapping (unordered pairs)
 (define (corner-image a b c)
   (let* ([d1 (direction a b)]
          [d2 (direction b c)])
@@ -151,12 +146,10 @@ SNAKE-BODY-ANGLE
 ;; END OF ADDED TURN LOGIC
 ;; ============================================
 
-;; New helper: get body image based on direction
 (define (get-body-image dir)
   (cond [(or (symbol=? dir 'up) (symbol=? dir 'down)) SNAKE-BODY]
         [(or (symbol=? dir 'left) (symbol=? dir 'right)) (rotate 90 SNAKE-BODY)]))
 
-;; New helper: get head image based on direction
 (define (get-head-image dir)
   (cond [(symbol=? dir 'right) (rotate 270 SNAKE-HEAD)]
         [(symbol=? dir 'down) (rotate 180 SNAKE-HEAD)]
@@ -175,7 +168,7 @@ SNAKE-BODY-ANGLE
        (add-line scene
                  (* i CELL-SIZE) 0
                  (* i CELL-SIZE) SCENE-HEIGHT
-                 "gray"))))
+                 GRID-COLOR))))
 
 (define (draw-hlines i max scene)
   (if (> i max)
@@ -185,7 +178,7 @@ SNAKE-BODY-ANGLE
        (add-line scene
                  0 (* i CELL-SIZE)
                  SCENE-WIDTH (* i CELL-SIZE)
-                 "gray"))))
+                 GRID-COLOR))))
 
 (define (draw-grid scene)
   (let* ([vertical (draw-vlines 0 WIDTH scene)]
@@ -196,14 +189,10 @@ SNAKE-BODY-ANGLE
 ;; Rendering Snake Game
 ;; ======================
 
-;; ======================
-;; REPLACED draw-tail WITH TURN DETECTION
-;; ======================
 (define (draw-tail prev tail scene)
   (cond
     [(empty? tail) scene]
 
-    ;; last
     [(empty? (rest tail))
      (let* ([cur (first tail)]
             [dir (direction prev cur)])
@@ -212,7 +201,6 @@ SNAKE-BODY-ANGLE
                     (* (posn-y cur) CELL-SIZE)
                     scene))]
 
-    ;; turn or straight
     [else
      (let* ([cur (first tail)]
             [nxt (second tail)]
@@ -225,9 +213,6 @@ SNAKE-BODY-ANGLE
                           (* (posn-y cur) CELL-SIZE)
                           scene)])
        (draw-tail cur (rest tail) new-scene))]))
-;; ======================
-;; END OF draw-tail PATCH
-;; ======================
 
 (define (draw-snake snake dir scene)
   (let ([snake-list (vector->list snake)])
@@ -244,14 +229,12 @@ SNAKE-BODY-ANGLE
                              scene-with-tail)])
           scene-with-head))))
 
-;; Draw food
 (define (draw-food food scene)
   (place-image FRUIT
                (* (posn-x food) CELL-SIZE)
                (* (posn-y food) CELL-SIZE)
                scene))
 
-;; Score bar
 (define (create-score-bar score record)
   (let* ([score-text (text (string-append "Score: " (number->string score)) 18 "white")]
          [record-text (text (string-append "Record: " (number->string record)) 18 "yellow")]
@@ -315,7 +298,6 @@ SNAKE-BODY-ANGLE
         [snake (world-snake w)])
     
     (if (symbol=? dir 'none)
-        ;; first direction always right
         (make-world 'game (world-menu w) snake 'right (world-food w)
                     (world-game-over? w) (world-score w) (world-record w)
                     (world-tick-counter w))
