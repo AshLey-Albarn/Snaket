@@ -15,7 +15,7 @@
 ;; ======================
 
 (define MAX-SPEED 0.30)
-(define MIN-SPEED 0.001)
+(define MIN-SPEED 0.01)
 
 ;size, cells and grid
 (define CELL-NUM-WIDTH 20)
