@@ -13,6 +13,17 @@
 ;; ======================
 ;; Constants
 ;; ======================
+
+(define MAX-SPEED 0.30)
+(define MIN-SPEED 0.01)
+
+;game speed (not used)
+(define SPEED-SLOW 0.20)
+(define SPEED-MEDIUM 0.10)
+(define SPEED-FAST 0.05)
+(define SPEED-SUPFAST 0.01)
+
+;size, cells and grid
 (define CELL-NUM-WIDTH 20)
 (define CELL-NUM-HEIGHT 20)
 (define CELL-SIZE 20)
@@ -24,12 +35,11 @@
 (define TOTAL-WIDTH (+ SCENE-WIDTH (* 2 BORDER-SIZE)))
 (define TOTAL-HEIGHT (+ SCENE-HEIGHT TOP-BORDER-SIZE BORDER-SIZE))
 
-;; Button
+;Button
 (define BUTTON-WIDTH 100)
 (define BUTTON-HEIGHT 30)
 
-;; Graphics
-
+;Graphics
 (define GRID-COLOR "gray")
 (define SNAKE-COLOR "darkgreen")
 (define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 (circle 10 "solid" "white")))
@@ -39,7 +49,6 @@
                  (make-posn -10 -20))
            "solid"
            SNAKE-COLOR))))))
-
 (define SNAKE-BODY (rectangle 13 20 "solid" SNAKE-COLOR))
 (define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" (make-color 0 0 0 0)) 7 -7 (overlay/xy (rectangle 13 13 "solid" (make-color 0 0 0 0)) 0 -14 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7(rectangle 13 13 "solid" SNAKE-COLOR))))))
 
@@ -66,6 +75,8 @@
 ;; ======================
 ;; Helper Functions
 ;; ======================
+
+;movement for the head of the snake
 (define (move-head head dir)
   (let ([x (posn-x head)] [y (posn-y head)])
     (cond [(symbol=? dir 'up) (make-posn x (- y 1))]
@@ -73,6 +84,7 @@
           [(symbol=? dir 'left) (make-posn (- x 1) y)]
           [(symbol=? dir 'right) (make-posn (+ x 1) y)])))
 
+;checks collisions
 (define (wall-collision? p)
   (or (< (posn-x p) 1) (>= (posn-x p) CELL-NUM-WIDTH)
       (< (posn-y p) 1) (>= (posn-y p) CELL-NUM-HEIGHT)))
@@ -84,6 +96,7 @@
         (or (equal? head (vector-ref snake i))
             (loop (add1 i))))))
 
+;creates food in random places
 (define (random-food snake)
   (let ([p (make-posn (+ 1 (random (- CELL-NUM-WIDTH 2)))
                       (+ 1 (random (- CELL-NUM-HEIGHT 2))))])
@@ -269,13 +282,13 @@
 ;; ======================
 (define (render-menu m)
   (place-image
-   (text "IMPOSTA VELOCITÀ DI GIOCO" 24 "cyan")
+   (text "SET GAME SPEED" 24 "cyan")
    (/ TOTAL-WIDTH 2) 80
    (place-image
-    (text "Usa FRECCIA SU/GIÙ per cambiare" 18 "lightgray")
+    (text "Use W/S or up/down to change" 18 "lightgray")
     (/ TOTAL-WIDTH 2) 140
     (place-image
-     (text (string-append "Velocità attuale: " (number->string (exact->inexact (menu-speed m))))
+     (text (string-append "Current speed: " (number->string (exact->inexact (- (+ MAX-SPEED 0.01) (menu-speed m)))))
            20 "yellow")
      (/ TOTAL-WIDTH 2) 200
      (place-image
@@ -287,10 +300,10 @@
 ;; Key Handlers
 ;; ======================
 (define (menu-key m key)
-  (cond [(key=? key "up")
-         (make-menu (max 0.01 (- (menu-speed m) 0.01)))]
-        [(key=? key "down")
-         (make-menu (min 0.30 (+ (menu-speed m) 0.01)))]
+  (cond [(or (key=? key "up") (key=? key "W") (key=? key "w"))
+         (make-menu (max MIN-SPEED (- (menu-speed m) 0.01)))]
+        [(or (key=? key "down") (key=? key "S") (key=? key "s"))
+         (make-menu (min MAX-SPEED (+ (menu-speed m) 0.01)))]
         [else m]))
 
 (define (handle-key-game w key)
@@ -303,31 +316,33 @@
                     (world-tick-counter w))
 
         (cond
-          [(key=? key "up")
+          [(or (key=? key "up") (key=? key "W") (key=? key "w"))
            (if (symbol=? dir 'down) w
                (make-world 'game (world-menu w) snake 'up (world-food w)
                            (world-game-over? w) (world-score w) (world-record w)
                            (world-tick-counter w)))]
 
-          [(key=? key "down")
+          [(or (key=? key "down") (key=? key "S") (key=? key "s"))
            (if (symbol=? dir 'up) w
                (make-world 'game (world-menu w) snake 'down (world-food w)
                            (world-game-over? w) (world-score w) (world-record w)
                            (world-tick-counter w)))]
 
-          [(key=? key "left")
+          [(or (key=? key "left") (key=? key "A") (key=? key "a"))
            (if (symbol=? dir 'right) w
                (make-world 'game (world-menu w) snake 'left (world-food w)
                            (world-game-over? w) (world-score w) (world-record w)
                            (world-tick-counter w)))]
-
-          [(key=? key "right")
+ 
+          [(or (key=? key "right") (key=? key "D") (key=? key "d"))
            (if (symbol=? dir 'left) w
                (make-world 'game (world-menu w) snake 'right (world-food w)
                            (world-game-over? w) (world-score w) (world-record w)
                            (world-tick-counter w)))]
 
           [else w]))))
+
+
 
 (define (handle-key-unified w key)
   (cond
