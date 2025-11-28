@@ -13,14 +13,14 @@
 ;; ======================
 ;; Constants
 ;; ======================
-(define WIDTH 20)
-(define HEIGHT 20)
+(define CELL-NUM-WIDTH 20)
+(define CELL-NUM-HEIGHT 20)
 (define CELL-SIZE 20)
 (define BORDER-SIZE 10)             
 (define TOP-BORDER-SIZE (* 3 BORDER-SIZE))
 
-(define SCENE-WIDTH (* WIDTH CELL-SIZE))
-(define SCENE-HEIGHT (* HEIGHT CELL-SIZE))
+(define SCENE-WIDTH (* CELL-NUM-WIDTH CELL-SIZE))
+(define SCENE-HEIGHT (* CELL-NUM-HEIGHT CELL-SIZE))
 (define TOTAL-WIDTH (+ SCENE-WIDTH (* 2 BORDER-SIZE)))
 (define TOTAL-HEIGHT (+ SCENE-HEIGHT TOP-BORDER-SIZE BORDER-SIZE))
 
@@ -74,8 +74,8 @@
           [(symbol=? dir 'right) (make-posn (+ x 1) y)])))
 
 (define (wall-collision? p)
-  (or (< (posn-x p) 1) (>= (posn-x p) WIDTH)
-      (< (posn-y p) 1) (>= (posn-y p) HEIGHT)))
+  (or (< (posn-x p) 1) (>= (posn-x p) CELL-NUM-WIDTH)
+      (< (posn-y p) 1) (>= (posn-y p) CELL-NUM-HEIGHT)))
 
 (define (self-collision? head snake)
   (let loop ([i 1])
@@ -85,8 +85,8 @@
             (loop (add1 i))))))
 
 (define (random-food snake)
-  (let ([p (make-posn (+ 1 (random (- WIDTH 2)))
-                      (+ 1 (random (- HEIGHT 2))))])
+  (let ([p (make-posn (+ 1 (random (- CELL-NUM-WIDTH 2)))
+                      (+ 1 (random (- CELL-NUM-HEIGHT 2))))])
     (if (let loop ([i 0])
           (if (>= i (vector-length snake))
               #f
@@ -181,8 +181,8 @@
                  GRID-COLOR))))
 
 (define (draw-grid scene)
-  (let* ([vertical (draw-vlines 0 WIDTH scene)]
-         [horizontal (draw-hlines 0 HEIGHT vertical)])
+  (let* ([vertical (draw-vlines 0 CELL-NUM-WIDTH scene)]
+         [horizontal (draw-hlines 0 CELL-NUM-HEIGHT vertical)])
     horizontal))
 
 ;; ======================
