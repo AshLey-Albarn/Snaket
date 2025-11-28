@@ -15,13 +15,7 @@
 ;; ======================
 
 (define MAX-SPEED 0.30)
-(define MIN-SPEED 0.01)
-
-;game speed (not used)
-(define SPEED-SLOW 0.20)
-(define SPEED-MEDIUM 0.10)
-(define SPEED-FAST 0.05)
-(define SPEED-SUPFAST 0.01)
+(define MIN-SPEED 0.001)
 
 ;size, cells and grid
 (define CELL-NUM-WIDTH 20)
@@ -42,6 +36,8 @@
 ;Graphics
 (define GRID-COLOR "gray")
 (define SNAKE-COLOR "darkgreen")
+(define TRANSPARENT (make-color 0 0 0 0))
+
 (define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 (circle 10 "solid" "white")))
 (define SNAKE-HEAD (scale 0.5 (overlay/xy EYE -20 -25 (overlay/xy EYE 0 -25 (rotate 90(polygon (list (make-pulled-point 1/2 20 0 0 1/2 -20)
                  (make-posn -10 20)
@@ -50,7 +46,10 @@
            "solid"
            SNAKE-COLOR))))))
 (define SNAKE-BODY (rectangle 13 20 "solid" SNAKE-COLOR))
-(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" (make-color 0 0 0 0)) 7 -7 (overlay/xy (rectangle 13 13 "solid" (make-color 0 0 0 0)) 0 -14 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7 (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7(rectangle 13 13 "solid" SNAKE-COLOR))))))
+(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 7 -7
+                         (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 0 -14
+                         (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7
+                         (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7 (rectangle 13 13 "solid" SNAKE-COLOR))))))
 
 
 (define FRUIT-CORE (circle 10 "solid" "red"))
@@ -108,6 +107,11 @@
         (random-food snake)
         p)))
 
+;; ============================================
+;; ADDED HELPERS FOR TURN DETECTION
+;; ============================================
+
+;returns either 'up 'down 'left 'right based on the x's and y's
 (define (direction from to)
   (let ([dx (- (posn-x to) (posn-x from))]
         [dy (- (posn-y to) (posn-y from))])
@@ -115,53 +119,40 @@
           [(= dy 0) (if (< dx 0) 'left 'right)]
           [else 'none])))
 
-;; ============================================
-;; ADDED HELPERS FOR TURN DETECTION
-;; ============================================
-(define (vertical? d)
-  (or (eq? d 'up) (eq? d 'down)))
+(define (vertical? dir)
+  (or (eq? dir 'up) (eq? dir 'down)))
+(define (horizontal? dir)
+  (or (eq? dir 'left) (eq? dir 'right)))
 
-(define (horizontal? d)
-  (or (eq? d 'left) (eq? d 'right)))
-
-(define (turn? a b c)
-  (let* ([d1 (direction a b)]
-         [d2 (direction b c)])
-    (or (and (vertical? d1) (horizontal? d2))
-        (and (horizontal? d1) (vertical? d2)))))
-
-(define (corner-image a b c)
-  (let* ([d1 (direction a b)]
-         [d2 (direction b c)])
+;returns the correct tail piece to draw based on the postion of also the previous and next piece,
+;only case that doesent apply is if the snake has only one piece (cant get a next piece)
+(define (draw-tail-piece prev curr next)
+  (let* ([dir1 (direction prev curr)]
+         [dir2 (direction curr next)])
     (cond
-      [(or (and (eq? d1 'up) (eq? d2 'right))
-           (and (eq? d1 'left) (eq? d2 'down)))
+      [(eq? dir1 dir2) (get-body-image dir1)]
+      [(or (and (eq? dir1 'up) (eq? dir2 'right))
+           (and (eq? dir1 'left) (eq? dir2 'down)))
        (rotate 270 SNAKE-BODY-ANGLE)]
 
-      [(or (and (eq? d1 'right) (eq? d2 'up))
-           (and (eq? d1 'down)  (eq? d2 'left)))
+      [(or (and (eq? dir1 'right) (eq? dir2 'up))
+           (and (eq? dir1 'down)  (eq? dir2 'left)))
        (rotate 90 SNAKE-BODY-ANGLE)]
 
-      [(or (and (eq? d1 'right) (eq? d2 'down))
-           (and (eq? d1 'up)    (eq? d2 'left)))
+      [(or (and (eq? dir1 'right) (eq? dir2 'down))
+           (and (eq? dir1 'up)    (eq? dir2 'left)))
        (rotate 180 SNAKE-BODY-ANGLE)]
 
-      [(or (and (eq? d1 'down) (eq? d2 'right))
-           (and (eq? d1 'left) (eq? d2 'up)))
+      [(or (and (eq? dir1 'down) (eq? dir2 'right))
+           (and (eq? dir1 'left) (eq? dir2 'up)))
        (rotate 0 SNAKE-BODY-ANGLE)]
 
       [else SNAKE-BODY])))
 
 
-
-
-;; ============================================
-;; END OF ADDED TURN LOGIC
-;; ============================================
-
 (define (get-body-image dir)
-  (cond [(or (symbol=? dir 'up) (symbol=? dir 'down)) SNAKE-BODY]
-        [(or (symbol=? dir 'left) (symbol=? dir 'right)) (rotate 90 SNAKE-BODY)]))
+  (cond [(vertical? dir) SNAKE-BODY]
+        [(horizontal? dir) (rotate 90 SNAKE-BODY)]))
 
 (define (get-head-image dir)
   (cond [(symbol=? dir 'right) (rotate 270 SNAKE-HEAD)]
@@ -217,9 +208,7 @@
     [else
      (let* ([cur (first tail)]
             [nxt (second tail)]
-            [img (if (turn? prev cur nxt)
-                     (corner-image prev cur nxt)
-                     (get-body-image (direction prev cur)))]
+            [img (draw-tail-piece prev cur nxt)]
             [new-scene
              (place-image img
                           (* (posn-x cur) CELL-SIZE)
