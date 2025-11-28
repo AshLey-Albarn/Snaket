@@ -8,7 +8,7 @@
 ;; Menu speed variable
 ;; ======================
 (define-struct menu (speed))
-(define initial-menu (make-menu 0.05))
+(define initial-menu (make-menu 0.06))
 
 ;; ======================
 ;; Constants
