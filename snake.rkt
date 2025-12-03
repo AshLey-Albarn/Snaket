@@ -85,8 +85,8 @@
 
 ;checks collisions
 (define (wall-collision? p)
-  (or (< (posn-x p) 1) (>= (posn-x p) CELL-NUM-WIDTH)
-      (< (posn-y p) 1) (>= (posn-y p) CELL-NUM-HEIGHT)))
+  (or (< (posn-x p) 1) (>= (posn-x p) (+ CELL-NUM-WIDTH 1))
+      (< (posn-y p) 1) (>= (posn-y p) (+ CELL-NUM-HEIGHT 1))))
 
 (define (self-collision? head snake)
   (let loop ([i 1])
@@ -193,6 +193,10 @@
 ;; Rendering Snake Game
 ;; ======================
 
+(define (cell-center n)
+  (+ (* (sub1 n) CELL-SIZE)
+     (/ CELL-SIZE 2)))
+
 (define (draw-tail prev tail scene)
   (cond
     [(empty? tail) scene]
@@ -201,8 +205,8 @@
      (let* ([cur (first tail)]
             [dir (direction prev cur)])
        (place-image (get-body-image dir)
-                    (* (posn-x cur) CELL-SIZE)
-                    (* (posn-y cur) CELL-SIZE)
+                    (cell-center (posn-x cur))
+                    (cell-center (posn-y cur))
                     scene))]
 
     [else
@@ -211,8 +215,8 @@
             [img (draw-tail-piece prev cur nxt)]
             [new-scene
              (place-image img
-                          (* (posn-x cur) CELL-SIZE)
-                          (* (posn-y cur) CELL-SIZE)
+                          (cell-center (posn-x cur))
+                          (cell-center (posn-y cur))
                           scene)])
        (draw-tail cur (rest tail) new-scene))]))
 
@@ -226,15 +230,15 @@
                [head-img (get-head-image dir)]
                [scene-with-head
                 (place-image head-img
-                             (* (posn-x head) CELL-SIZE)
-                             (* (posn-y head) CELL-SIZE)
+                             (cell-center (posn-x head))
+                             (cell-center (posn-y head))
                              scene-with-tail)])
           scene-with-head))))
 
 (define (draw-food food scene)
   (place-image FRUIT
-               (* (posn-x food) CELL-SIZE)
-               (* (posn-y food) CELL-SIZE)
+               (cell-center (posn-x food))
+               (cell-center (posn-y food))
                scene))
 
 (define (create-score-bar score record)
@@ -289,9 +293,9 @@
 ;; Key Handlers
 ;; ======================
 (define (menu-key m key)
-  (cond [(or (key=? key "up") (key=? key "W") (key=? key "w"))
+  (cond [(or (key=? key "right") (key=? key "W") (key=? key "w"))
          (make-menu (max MIN-SPEED (- (menu-speed m) 0.01)))]
-        [(or (key=? key "down") (key=? key "S") (key=? key "s"))
+        [(or (key=? key "left") (key=? key "S") (key=? key "s"))
          (make-menu (min MAX-SPEED (+ (menu-speed m) 0.01)))]
         [else m]))
 
@@ -422,8 +426,8 @@
            (<= x (+ (/ SCENE-WIDTH 2) (/ BUTTON-WIDTH 2)))
            (>= y 0)
            (<= y BUTTON-HEIGHT))
-      (make-world 'game (world-menu w)
-                  initial-snake initial-dir (random-food initial-snake)
+      (make-world 'menu (world-menu w)
+                  initial-snake initial-dir initial-food
                   #f 0 (world-record w) 0)
       w))
 
