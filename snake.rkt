@@ -384,10 +384,42 @@
              (if (and (>= (posn-x n) 1) (<= (posn-x n) CELL-NUM-WIDTH)
                       (>= (posn-y n) 1) (<= (posn-y n) CELL-NUM-HEIGHT)
                       (not (member n obstacles))
-                      (not (equal? n (vector-ref snake 0))))  ; head shouldn't count
+                      (not (equal? n (vector-ref snake 0)))) ; la testa non conta
                  (+ acc 1)
                  acc))
            0 neighbors)))
+
+;; ======================
+;; Helper: Safe to place obstacle
+;; ======================
+(define (safe-to-place? p obstacles snake head)
+  ;; due celle davanti alla testa iniziale (always right)
+  (let ([front-cells (list (make-posn (+ 1 (posn-x head)) (posn-y head))
+                           (make-posn (+ 2 (posn-x head)) (posn-y head)))])
+    (and (>= (posn-x p) 1) (<= (posn-x p) CELL-NUM-WIDTH)
+         (>= (posn-y p) 1) (<= (posn-y p) CELL-NUM-HEIGHT)
+         (not (member p obstacles))
+         (not (member p front-cells)) ; <- esclude le due celle davanti alla testa
+         ;; non deve essere sul serpente
+         (let loop ([i 0])
+           (if (>= i (vector-length snake))
+               #t
+               (if (equal? (vector-ref snake i) p)
+                   #f
+                   (loop (add1 i)))))
+         ;; tutti i vicini devono avere almeno 2 liberi se mettiamo l'ostacolo
+         (let ([neighbors (list
+                           (make-posn (- (posn-x p) 1) (posn-y p))
+                           (make-posn (+ (posn-x p) 1) (posn-y p))
+                           (make-posn (posn-x p) (- (posn-y p) 1))
+                           (make-posn (posn-x p) (+ (posn-y p) 1)))])
+           (foldl (lambda (n acc)
+                    (and acc
+                         (or (member n obstacles)
+                             (>= (- (free-neighbors n snake (cons p obstacles)) 1) 2))))
+                  #t
+                  neighbors)))))
+
 
 ;; ======================
 ;; Check all non-obstacle tiles have at least 2 free neighbors
@@ -408,26 +440,71 @@
                       (loop 1 (+ y 1)))))))))
 
 ;; ======================
-;; Generate obstacles safely
+;; all-reachable? (senza define annidate)
 ;; ======================
-(define (generate-obstacles snake food)
-  (let ([num-obstacles (/ (* CELL-NUM-WIDTH CELL-NUM-HEIGHT) 20)])
-    (let loop ([count num-obstacles] [acc '()])
+(define (all-reachable? snake food obstacles)
+  (let ((width CELL-NUM-WIDTH)
+        (height CELL-NUM-HEIGHT)
+        (start (vector-ref snake 0)))
+
+    ;; neighbors è una variabile che contiene una procedura
+    (let ((neighbors
+           (lambda (pos)
+             (filter (lambda (p)
+                       (and (>= (posn-x p) 1) (<= (posn-x p) width)
+                            (>= (posn-y p) 1) (<= (posn-y p) height)
+                            (not (member p obstacles))))
+                     (list
+                      (make-posn (+ 1 (posn-x pos)) (posn-y pos))
+                      (make-posn (- (posn-x pos) 1) (posn-y pos))
+                      (make-posn (posn-x pos) (+ 1 (posn-y pos)))
+                      (make-posn (posn-x pos) (- (posn-y pos) 1)))))))
+
+      ;; BFS tramite named let: queue e visited sono liste di posn
+      (let loop-bfs ((queue (list start)) (visited (list start)))
+        (if (empty? queue)
+            ;; BFS terminata: controlla tutte le celle libere siano in `visited`
+            (let loop-check ((x 1) (y 1))
+              (cond
+                [(> y height) #t]
+                [else
+                 (let ((pos (make-posn x y)))
+                   (cond
+                     ;; se è un ostacolo, salto
+                     [(member pos obstacles)
+                      (if (< x width) (loop-check (+ x 1) y) (loop-check 1 (+ y 1)))]
+                     ;; se è libera ma non raggiunta -> fallisce
+                     [(not (member pos visited)) #f]
+                     ;; altrimenti continua
+                     [else (if (< x width) (loop-check (+ x 1) y) (loop-check 1 (+ y 1)))]))]))
+            ;; BFS continua: prendi current, calcola nuovi vicini non visitati
+            (let* ((current (first queue))
+                   (rest-queue (rest queue))
+                   (new-neighbors (filter (lambda (p) (not (member p visited)))
+                                          (neighbors current)))
+                   (new-visited (append visited new-neighbors)))
+              (loop-bfs (append rest-queue new-neighbors) new-visited)))))))
+
+;; ======================
+;; generate-obstacles-safe (usa safe-to-place?)
+;; ======================
+(define (generate-obstacles-safe snake food)
+  (let* ([head (vector-ref snake 0)]
+         [num-obstacles (/ (* CELL-NUM-WIDTH CELL-NUM-HEIGHT)
+                            (/ (+ CELL-NUM-WIDTH CELL-NUM-HEIGHT) 2.0))])
+    (let loop ((count num-obstacles) (acc '()))
       (if (= count 0)
-          (if (check-obstacle-conditions acc snake food)
+          (if (all-reachable? snake food acc)
               acc
-              (generate-obstacles snake food))  ; regenerate if fails
-          (let ([p (make-posn (+ 1 (random (- CELL-NUM-WIDTH 2)))
-                              (+ 1 (random (- CELL-NUM-HEIGHT 2))))])
-            (if (or (member p acc)
-                    (let loop2 ([i 0])
-                      (if (>= i (vector-length snake))
-                          #f
-                          (or (equal? (vector-ref snake i) p)
-                              (loop2 (add1 i)))))
-                    (equal? p food))
-                (loop count acc)
-                (loop (sub1 count) (cons p acc))))))))
+              (generate-obstacles-safe snake food))
+          (let ((p (make-posn (+ 1 (random (- CELL-NUM-WIDTH 2)))
+                              (+ 1 (random (- CELL-NUM-HEIGHT 2))))))
+            (if (safe-to-place? p acc snake head)
+                (loop (sub1 count) (cons p acc))
+                (loop count acc)))))))
+
+
+
 
 
 
@@ -438,7 +515,7 @@
        [(key=? key " ")
         (let* ([food (random-food initial-snake '())]
                [obs (if (eq? (menu-mode (world-menu w)) 'obstacles)
-                        (generate-obstacles initial-snake food)
+                        (generate-obstacles-safe initial-snake food)
                         '())]
                [safe-food (if (member food obs)
     (random-food initial-snake obs)
