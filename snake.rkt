@@ -356,18 +356,70 @@
 
           [else w]))))
 
+;; ======================
+;; Helper: Valid position (inside grid, not on snake, food, or obstacle)
+;; ======================
+(define (valid-position? p snake food obstacles)
+  (and (>= (posn-x p) 1) (<= (posn-x p) CELL-NUM-WIDTH)
+       (>= (posn-y p) 1) (<= (posn-y p) CELL-NUM-HEIGHT)
+       (not (member p obstacles))
+       (not (equal? p food))
+       (let loop ([i 0])
+         (if (>= i (vector-length snake))
+             #t
+             (if (equal? p (vector-ref snake i))
+                 #f
+                 (loop (add1 i)))))))
+
+;; ======================
+;; Helper: Count free neighbors of a tile
+;; ======================
+(define (free-neighbors p snake obstacles)
+  (let ([neighbors (list
+                    (make-posn (- (posn-x p) 1) (posn-y p))
+                    (make-posn (+ (posn-x p) 1) (posn-y p))
+                    (make-posn (posn-x p) (- (posn-y p) 1))
+                    (make-posn (posn-x p) (+ (posn-y p) 1)))])
+    (foldl (lambda (n acc)
+             (if (and (>= (posn-x n) 1) (<= (posn-x n) CELL-NUM-WIDTH)
+                      (>= (posn-y n) 1) (<= (posn-y n) CELL-NUM-HEIGHT)
+                      (not (member n obstacles))
+                      (not (equal? n (vector-ref snake 0))))  ; head shouldn't count
+                 (+ acc 1)
+                 acc))
+           0 neighbors)))
+
+;; ======================
+;; Check all non-obstacle tiles have at least 2 free neighbors
+;; ======================
+(define (check-obstacle-conditions obstacles snake food)
+  (let loop ([x 1] [y 1])
+    (if (> y CELL-NUM-HEIGHT)
+        #t
+        (let ([pos (make-posn x y)])
+          (if (member pos obstacles)
+              (if (< x CELL-NUM-WIDTH)
+                  (loop (+ x 1) y)
+                  (loop 1 (+ y 1)))
+              (if (< (free-neighbors pos snake obstacles) 2)
+                  #f
+                  (if (< x CELL-NUM-WIDTH)
+                      (loop (+ x 1) y)
+                      (loop 1 (+ y 1)))))))))
+
+;; ======================
+;; Generate obstacles safely
+;; ======================
 (define (generate-obstacles snake food)
-  (let* ([head (vector-ref snake 0)]
-         [front (move-head head 'right)]) ; snake always starts facing right in this game
-    (let loop ([count (/ (* CELL-NUM-WIDTH CELL-NUM-HEIGHT) 20)]
-               [acc '()])
+  (let ([num-obstacles (/ (* CELL-NUM-WIDTH CELL-NUM-HEIGHT) 20)])
+    (let loop ([count num-obstacles] [acc '()])
       (if (= count 0)
-          acc
+          (if (check-obstacle-conditions acc snake food)
+              acc
+              (generate-obstacles snake food))  ; regenerate if fails
           (let ([p (make-posn (+ 1 (random (- CELL-NUM-WIDTH 2)))
                               (+ 1 (random (- CELL-NUM-HEIGHT 2))))])
             (if (or (member p acc)
-                    (equal? p head)
-                    (equal? p front)
                     (let loop2 ([i 0])
                       (if (>= i (vector-length snake))
                           #f
