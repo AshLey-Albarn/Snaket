@@ -3,12 +3,13 @@
 #reader(lib "htdp-advanced-reader.ss" "lang")((modname snake) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #t #t none #f () #f)))
 (require 2htdp/universe)
 (require 2htdp/image)
+(require racket/list)
 
 ;; ======================
 ;; Menu speed variable
 ;; ======================
-(define-struct menu (speed mode))
-(define initial-menu (make-menu 0.06 'normal))
+(define-struct menu (speed mode color))
+(define initial-menu (make-menu 0.06 'normal 'red))
 
 ;; ======================
 ;; Constants
@@ -34,23 +35,31 @@
 (define BUTTON-HEIGHT 30)
 
 ;Graphics
+(define COLOR-OPTIONS '(darkgreen red blue magenta yellow))
+
 (define GRID-COLOR "gray")
 (define SNAKE-COLOR "darkgreen")
 (define TRANSPARENT (make-color 0 0 0 0))
 
 (define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 (circle 10 "solid" "white")))
-(define SNAKE-HEAD (scale 0.5 (overlay/xy EYE -20 -25 (overlay/xy EYE 0 -25 (rotate 90(polygon (list (make-pulled-point 1/2 20 0 0 1/2 -20)
+
+
+(define (make-snake-head color)
+  (scale 0.5 (overlay/xy EYE -20 -25 (overlay/xy EYE 0 -25 (rotate 90 (polygon (list (make-pulled-point 1/2 20 0 0 1/2 -20)
                  (make-posn -10 20)
                  (make-pulled-point 1/2 -20 60 0 1/2 20)
                  (make-posn -10 -20))
            "solid"
-           SNAKE-COLOR))))))
-(define SNAKE-BODY (rectangle 13 20 "solid" SNAKE-COLOR))
-(define SNAKE-BODY-ANGLE (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 7 -7
-                         (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 0 -14
-                         (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) -7 -7
-                         (overlay/xy (rectangle 13 13 "solid" SNAKE-COLOR) 0 7 (rectangle 13 13 "solid" SNAKE-COLOR))))))
+           color))))))
 
+(define (make-snake-body color)
+  (rectangle 13 20 "solid" color))
+
+(define (make-snake-body-angle color)
+  (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 7 -7
+              (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 0 -14
+                          (overlay/xy (rectangle 13 13 "solid" color) -7 -7
+                                      (overlay/xy (rectangle 13 13 "solid" color) 0 7 (rectangle 13 13 "solid" color))))))
 
 (define FRUIT-CORE (circle 10 "solid" "red"))
 (define FRUIT-LEAF (ellipse 5 10 "solid" "green"))
@@ -133,40 +142,35 @@
 
 ;returns the correct tail piece to draw based on the postion of also the previous and next piece,
 ;only case that doesent apply is if the snake has only one piece (cant get a next piece)
-(define (draw-tail-piece prev curr next)
+(define (get-body-image dir color)
+  (cond [(vertical? dir) (make-snake-body color)]
+        [(horizontal? dir) (rotate 90 (make-snake-body color))]))
+
+(define (draw-tail-piece prev curr next color)
   (let* ([dir1 (direction prev curr)]
          [dir2 (direction curr next)])
     (cond
-      [(eq? dir1 dir2) (get-body-image dir1)]
+      [(eq? dir1 dir2) (get-body-image dir1 color)]
       [(or (and (eq? dir1 'up) (eq? dir2 'right))
            (and (eq? dir1 'left) (eq? dir2 'down)))
-       (rotate 270 SNAKE-BODY-ANGLE)]
-
+       (rotate 270 (make-snake-body-angle color))]
       [(or (and (eq? dir1 'right) (eq? dir2 'up))
-           (and (eq? dir1 'down)  (eq? dir2 'left)))
-       (rotate 90 SNAKE-BODY-ANGLE)]
-
+           (and (eq? dir1 'down) (eq? dir2 'left)))
+       (rotate 90 (make-snake-body-angle color))]
       [(or (and (eq? dir1 'right) (eq? dir2 'down))
-           (and (eq? dir1 'up)    (eq? dir2 'left)))
-       (rotate 180 SNAKE-BODY-ANGLE)]
-
+           (and (eq? dir1 'up) (eq? dir2 'left)))
+       (rotate 180 (make-snake-body-angle color))]
       [(or (and (eq? dir1 'down) (eq? dir2 'right))
            (and (eq? dir1 'left) (eq? dir2 'up)))
-       (rotate 0 SNAKE-BODY-ANGLE)]
+       (rotate 0 (make-snake-body-angle color))]
+      [else (make-snake-body color)])))
 
-      [else SNAKE-BODY])))
-
-
-(define (get-body-image dir)
-  (cond [(vertical? dir) SNAKE-BODY]
-        [(horizontal? dir) (rotate 90 SNAKE-BODY)]))
-
-(define (get-head-image dir)
-  (cond [(symbol=? dir 'right) (rotate 270 SNAKE-HEAD)]
-        [(symbol=? dir 'down) (rotate 180 SNAKE-HEAD)]
-        [(symbol=? dir 'left)(rotate 90 SNAKE-HEAD)]
-        [(symbol=? dir 'up) SNAKE-HEAD]
-        [else (rotate 270 SNAKE-HEAD)]))
+(define (get-head-image dir color)
+  (cond [(symbol=? dir 'right) (rotate 270 (make-snake-head color))]
+        [(symbol=? dir 'down) (rotate 180 (make-snake-head color))]
+        [(symbol=? dir 'left) (rotate 90 (make-snake-head color))]
+        [(symbol=? dir 'up) (make-snake-head color)]
+        [else (rotate 270 (make-snake-head color))]))
 
 ;; ======================
 ;; Grid Drawing
@@ -212,37 +216,35 @@
                         s))
          scene obstacles))
 
-(define (draw-tail prev tail scene)
+(define (draw-tail prev tail scene color)
   (cond
     [(empty? tail) scene]
-
     [(empty? (rest tail))
      (let* ([cur (first tail)]
             [dir (direction prev cur)])
-       (place-image (get-body-image dir)
+       (place-image (get-body-image dir color)
                     (cell-center (posn-x cur))
                     (cell-center (posn-y cur))
                     scene))]
-
     [else
      (let* ([cur (first tail)]
             [nxt (second tail)]
-            [img (draw-tail-piece prev cur nxt)]
+            [img (draw-tail-piece prev cur nxt color)]
             [new-scene
              (place-image img
                           (cell-center (posn-x cur))
                           (cell-center (posn-y cur))
                           scene)])
-       (draw-tail cur (rest tail) new-scene))]))
+       (draw-tail cur (rest tail) new-scene color))]))
 
-(define (draw-snake snake dir scene)
+(define (draw-snake snake dir scene color)
   (let ([snake-list (vector->list snake)])
     (if (empty? snake-list)
         scene
         (let* ([head (first snake-list)]
                [tail (rest snake-list)]
-               [scene-with-tail (draw-tail head tail scene)]
-               [head-img (get-head-image dir)]
+               [scene-with-tail (draw-tail head tail scene color)]
+               [head-img (get-head-image dir color)]
                [scene-with-head
                 (place-image head-img
                              (cell-center (posn-x head))
@@ -268,10 +270,11 @@
         (place-image button (/ SCENE-WIDTH 2) (/ TOP-BORDER-SIZE 2) score-area)))))
 
 (define (render-game w)
-  (let* ([inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
+  (let* ([color (menu-color (world-menu w))] 
+         [inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
          [grid-scene (draw-grid inner-scene)]
          [scene-with-obstacles (draw-obstacles (world-obstacles w) grid-scene)]
-         [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles)]
+         [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles color)]  ;; Pass color
          [scene-with-food (draw-food (world-food w) scene-with-snake)]
          [final-inner
           (if (world-game-over? w)
@@ -291,7 +294,7 @@
 ;; ======================
 (define (render-menu m)
   (place-image
-   (text "SET GAME SPEED AND MODE" 24 "cyan")
+   (text "SNAKET" 24 "cyan")
    (/ TOTAL-WIDTH 2) 80
    (place-image
     (text "Use W/S or up/down for speed, Q/E for mode" 18 "lightgray")
@@ -304,21 +307,60 @@
       (text (string-append "Current mode: " (symbol->string (menu-mode m))) 20 "yellow")
       (/ TOTAL-WIDTH 2) 230
       (place-image
+       (text (string-append "Snake color: "
+                            (symbol->string (menu-color m)))
+             20 "yellow")
+       (/ TOTAL-WIDTH 2) 260
+      (place-image
        (text "Press SPACEBAR to start" 22 "white")
        (/ TOTAL-WIDTH 2) 290
-       (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black")))))))
+       (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black"))))))))
 
 ;; ======================
 ;; Key Handlers
 ;; ======================
+
 (define (menu-key m key)
-  (cond [(or (key=? key "right") (key=? key "W") (key=? key "w"))
-         (make-menu (max MIN-SPEED (- (menu-speed m) 0.01)) (menu-mode m))]
-        [(or (key=? key "left") (key=? key "S") (key=? key "s"))
-         (make-menu (min MAX-SPEED (+ (menu-speed m) 0.01)) (menu-mode m))]
-        [(key=? key "q") (make-menu (menu-speed m) 'normal)]
-        [(key=? key "e") (make-menu (menu-speed m) 'obstacles)]
-        [else m]))
+  (cond
+    ;; speed up
+    [(or (key=? key "right") (key=? key "W") (key=? key "w"))
+     (make-menu (max MIN-SPEED (- (menu-speed m) 0.01))
+                (menu-mode m)
+                (menu-color m))]
+
+    ;; slow down
+    [(or (key=? key "left") (key=? key "S") (key=? key "s"))
+     (make-menu (min MAX-SPEED (+ (menu-speed m) 0.01))
+                (menu-mode m)
+                (menu-color m))]
+
+    ;; toggle mode
+    [(or (key=? key "q") (key=? key "Q") (key=? key "e") (key=? key "E"))
+     (let ([new-mode (if (eq? (menu-mode m) 'normal)
+                         'obstacles
+                         'normal)])
+       (make-menu (menu-speed m) new-mode (menu-color m)))]
+
+    ;; NEW: cycle snake color using A/D or left/right arrows
+    [(or (key=? key "a") (key=? key "A"))
+     (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
+            [prev-idx (modulo (- idx 1) (length COLOR-OPTIONS))]
+            [new-color (list-ref COLOR-OPTIONS prev-idx)])
+       (make-menu (menu-speed m)
+                  (menu-mode m)
+                  new-color))]
+
+    [(or (key=? key "d") (key=? key "D"))
+     (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
+            [next-idx (modulo (+ idx 1) (length COLOR-OPTIONS))]
+            [new-color (list-ref COLOR-OPTIONS next-idx)])
+       (make-menu (menu-speed m)
+                  (menu-mode m)
+                  new-color))]
+
+    [else m]))
+
+
 
 (define (handle-key-game w key)
   (let ([dir (world-dir w)]
