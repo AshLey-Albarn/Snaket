@@ -9,7 +9,7 @@
 ;; Menu speed variable
 ;; ======================
 (define-struct menu (speed mode color))
-(define initial-menu (make-menu 0.06 'normal 'red))
+(define initial-menu (make-menu 0.10 'normal 'darkgreen))
 
 ;; ======================
 ;; Constants
@@ -17,6 +17,11 @@
 
 (define MAX-SPEED 0.30)
 (define MIN-SPEED 0.01)
+
+(define SPEEDS-LIST (list 0.15 0.10 0.07))
+(define SPEED-LABELS '("Slow" "Normal" "Fast"))
+
+
 
 ;size, cells and grid
 (define CELL-NUM-WIDTH 20)
@@ -300,8 +305,8 @@
     (text "Use W/S or up/down for speed, Q/E for mode" 18 "lightgray")
     (/ TOTAL-WIDTH 2) 140
     (place-image
-     (text (string-append "Current speed: " (number->string (exact->inexact (- (+ MAX-SPEED 0.01) (menu-speed m)))))
-           20 "yellow")
+     (text (string-append "Current speed: " (speed-label (menu-speed m))) 20 "yellow")
+
      (/ TOTAL-WIDTH 2) 200
      (place-image
       (text (string-append "Current mode: " (symbol->string (menu-mode m))) 20 "yellow")
@@ -320,45 +325,53 @@
 ;; Key Handlers
 ;; ======================
 
+(define (speed-label speed)
+  (let ([idx (index-of SPEEDS-LIST speed)])
+    (if (eq? idx #f)
+        "Normal"
+        (list-ref SPEED-LABELS idx))))
+
+
+
 (define (menu-key m key)
-  (cond
-    ;; speed up
-    [(or (key=? key "right") (key=? key "W") (key=? key "w"))
-     (make-menu (max MIN-SPEED (- (menu-speed m) 0.01))
-                (menu-mode m)
-                (menu-color m))]
-
-    ;; slow down
-    [(or (key=? key "left") (key=? key "S") (key=? key "s"))
-     (make-menu (min MAX-SPEED (+ (menu-speed m) 0.01))
-                (menu-mode m)
-                (menu-color m))]
-
-    ;; toggle mode
-    [(or (key=? key "q") (key=? key "Q") (key=? key "e") (key=? key "E"))
-     (let ([new-mode (if (eq? (menu-mode m) 'normal)
-                         'obstacles
-                         'normal)])
-       (make-menu (menu-speed m) new-mode (menu-color m)))]
-
-    ;; NEW: cycle snake color using A/D or left/right arrows
-    [(or (key=? key "a") (key=? key "A"))
-     (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
-            [prev-idx (modulo (- idx 1) (length COLOR-OPTIONS))]
-            [new-color (list-ref COLOR-OPTIONS prev-idx)])
-       (make-menu (menu-speed m)
+  (let* ([current-speed (menu-speed m)]
+         [idx (let ([i (index-of SPEEDS-LIST current-speed)])
+                (if (eq? i #f) 1 i))] ; fixed
+         [num-speeds (length SPEEDS-LIST)])
+    (cond
+      ;; speed up (next step)
+      [(or (key=? key "right") (key=? key "W") (key=? key "w"))
+       (make-menu (list-ref SPEEDS-LIST (min (add1 idx) (sub1 num-speeds)))
                   (menu-mode m)
-                  new-color))]
+                  (menu-color m))]
 
-    [(or (key=? key "d") (key=? key "D"))
-     (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
-            [next-idx (modulo (+ idx 1) (length COLOR-OPTIONS))]
-            [new-color (list-ref COLOR-OPTIONS next-idx)])
-       (make-menu (menu-speed m)
+      ;; slow down (previous step)
+      [(or (key=? key "left") (key=? key "S") (key=? key "s"))
+       (make-menu (list-ref SPEEDS-LIST (max 0 (sub1 idx)))
                   (menu-mode m)
-                  new-color))]
+                  (menu-color m))]
 
-    [else m]))
+      ;; toggle mode
+      [(or (key=? key "q") (key=? key "Q") (key=? key "e") (key=? key "E"))
+       (let ([new-mode (if (eq? (menu-mode m) 'normal) 'obstacles 'normal)])
+         (make-menu (menu-speed m) new-mode (menu-color m)))]
+
+      ;; cycle snake color backward
+      [(or (key=? key "a") (key=? key "A"))
+       (let* ([color-idx (index-of COLOR-OPTIONS (menu-color m))]
+              [prev-idx (modulo (- color-idx 1) (length COLOR-OPTIONS))]
+              [new-color (list-ref COLOR-OPTIONS prev-idx)])
+         (make-menu (menu-speed m) (menu-mode m) new-color))]
+
+      ;; cycle snake color forward
+      [(or (key=? key "d") (key=? key "D"))
+       (let* ([color-idx (index-of COLOR-OPTIONS (menu-color m))]
+              [next-idx (modulo (+ color-idx 1) (length COLOR-OPTIONS))]
+              [new-color (list-ref COLOR-OPTIONS next-idx)])
+         (make-menu (menu-speed m) (menu-mode m) new-color))]
+
+      [else m])))
+
 
 
 
