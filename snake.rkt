@@ -18,8 +18,8 @@
 (define MAX-SPEED 0.30)
 (define MIN-SPEED 0.01)
 
-(define SPEEDS-LIST (list 0.15 0.10 0.07))
-(define SPEED-LABELS '("Slow" "Normal" "Fast"))
+(define SPEEDS-LIST (list 0.15 0.10 0.07 0.03))
+(define SPEED-LABELS '("Slow" "Normal" "Fast" "Crazy"))
 (define MODE-OPTIONS '(Plain Obstacles))
 (define SIZE-OPTIONS (list 16 20 24))
 
@@ -77,7 +77,7 @@
 ;; ======================
 ;; Data Structures
 ;; ======================
-(define-struct world (mode menu snake dir food game-over? score record tick-counter obstacles))
+(define-struct world (mode menu snake dir food game-over? score record tick-counter obstacles free-spaces paused?))
 
 ;; ======================
 ;; Initial Game Data
@@ -127,6 +127,12 @@
          (member p obstacles))
         (random-food snake obstacles)
         p)))
+
+;creates free spaces
+(define (count-free-spaces obstacles)
+  (- (* CELL-NUM-WIDTH CELL-NUM-HEIGHT)
+     (length obstacles)
+     1))
 
 
 ;; ============================================
@@ -268,36 +274,73 @@
                (cell-center (posn-y food))
                scene))
 
-(define (create-score-bar score record)
-  (let* ([score-text (text (string-append "Score: " (number->string score)) 18 "white")]
+(define (create-score-bar score record paused?)
+  (let* ([score-text  (text (string-append "Score: " (number->string score)) 18 "white")]
          [record-text (text (string-append "Record: " (number->string record)) 18 "yellow")]
-         [button-bg (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray")]
-         [button-label (text "Restart" 16 "black")]
+         [button-spacing 10] ; distanza tra i pulsanti
+         
+         ;; Restart
+         [restart-button (overlay (text "Restart" 16 "black")
+                                  (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray"))]
+         
+         ;; Pause
+         [pause-button (overlay (text (if paused? "Resume" "Pause") 16 "black")
+                                (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray"))]
+         
+         [score-area (rectangle SCENE-WIDTH TOP-BORDER-SIZE "solid" "black")]
+         [center-x (/ SCENE-WIDTH 2)]
+         
+         ;; posizionamento dei pulsanti al centro con spazio
+         [restart-x (- center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
+         [pause-x (+ center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
+         
+         [buttons-scene (place-image restart-button restart-x (/ TOP-BORDER-SIZE 2)
+                            (place-image pause-button pause-x (/ TOP-BORDER-SIZE 2) score-area))]
+         
+         ;; posizionamento score e record vicino ai bordi
+         [score-x (+ (/ BUTTON-WIDTH 2) 10)]                 ; 10 px di margine sinistro
+         [record-x (- SCENE-WIDTH (/ BUTTON-WIDTH 2) 10)])   ; 10 px di margine destro
+         
+    ;; comporre la scena finale
+    (place-image score-text score-x (/ TOP-BORDER-SIZE 2)
+      (place-image record-text record-x (/ TOP-BORDER-SIZE 2) buttons-scene))))
+
+
+
+
+
+(define (draw-pause-button paused? scene)
+  (let* ([button-bg (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray")]
+         [label (if paused? "Resume" "Pause")]
+         [button-label (text label 16 "black")]
          [button (overlay button-label button-bg)]
-         [score-area (rectangle SCENE-WIDTH TOP-BORDER-SIZE "solid" "black")])
-    (place-image score-text 80 (/ TOP-BORDER-SIZE 2)
-      (place-image record-text (- SCENE-WIDTH 100) (/ TOP-BORDER-SIZE 2)
-        (place-image button (/ SCENE-WIDTH 2) (/ TOP-BORDER-SIZE 2) score-area)))))
+         ;; posizioniamo il pulsante a destra del bottone Restart
+         [x (+ (/ SCENE-WIDTH 2) BUTTON-WIDTH 1)] ; 1 pixel di margine
+         [y (/ TOP-BORDER-SIZE 2)]) ; stessa altezza del bottone Restart
+    (place-image button x y scene)))
+
+
 
 (define (render-game w)
   (let* ([color (menu-color (world-menu w))] 
          [inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
          [grid-scene (draw-grid inner-scene)]
          [scene-with-obstacles (draw-obstacles (world-obstacles w) (menu-size (world-menu w)) grid-scene)]
-         [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles color)]  ;; Pass color
+         [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles color)]
          [scene-with-food (draw-food (world-food w) scene-with-snake)]
          [final-inner
           (if (world-game-over? w)
               (overlay (text "Game Over" 24 "red") scene-with-food)
               scene-with-food)]
-         [score-bar (create-score-bar (world-score w) (world-record w))]
+         [score-bar (create-score-bar (world-score w) (world-record w) (world-paused? w))]
          [outer (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black")]
          [scene-with-grid
           (place-image final-inner
                        (+ BORDER-SIZE (/ SCENE-WIDTH 2))
                        (+ TOP-BORDER-SIZE (/ SCENE-HEIGHT 2))
                        (overlay/align "center" "top" score-bar outer))])
-    scene-with-grid))
+     scene-with-grid))
+
 
 ;; ======================
 ;; Rendering Menu
@@ -468,34 +511,84 @@
         [snake (world-snake w)])
     
     (if (symbol=? dir 'none)
-        (make-world 'game (world-menu w) snake 'right (world-food w)
-                    (world-game-over? w) (world-score w) (world-record w)
-                    (world-tick-counter w) (world-obstacles w))
+        (make-world 'game
+            (world-menu w)
+            snake
+            'right
+            (world-food w)
+            (world-game-over? w)
+            (world-score w)
+            (world-record w)
+            (world-tick-counter w)
+            (world-obstacles w)
+            (world-free-spaces w)
+            #f)
+
 
         (cond
           [(or (key=? key "up") (key=? key "W") (key=? key "w"))
            (if (symbol=? dir 'down) w
-               (make-world 'game (world-menu w) snake 'up (world-food w)
-                           (world-game-over? w) (world-score w) (world-record w)
-                           (world-tick-counter w) (world-obstacles w)))]
+               (make-world 'game
+            (world-menu w)
+            snake
+            'up   ; or 'down, 'left, 'right
+            (world-food w)
+            (world-game-over? w)
+            (world-score w)
+            (world-record w)
+            (world-tick-counter w)
+            (world-obstacles w)
+            (world-free-spaces w)
+            #f)
+)]
 
           [(or (key=? key "down") (key=? key "S") (key=? key "s"))
            (if (symbol=? dir 'up) w
-               (make-world 'game (world-menu w) snake 'down (world-food w)
-                           (world-game-over? w) (world-score w) (world-record w)
-                           (world-tick-counter w) (world-obstacles w)))]
+               (make-world 'game
+            (world-menu w)
+            snake
+            'down   ; or 'down, 'left, 'right
+            (world-food w)
+            (world-game-over? w)
+            (world-score w)
+            (world-record w)
+            (world-tick-counter w)
+            (world-obstacles w)
+            (world-free-spaces w)
+            #f)
+)]
 
           [(or (key=? key "left") (key=? key "A") (key=? key "a"))
            (if (symbol=? dir 'right) w
-               (make-world 'game (world-menu w) snake 'left (world-food w)
-                           (world-game-over? w) (world-score w) (world-record w)
-                           (world-tick-counter w) (world-obstacles w)))]
+               (make-world 'game
+            (world-menu w)
+            snake
+            'left   ; or 'down, 'left, 'right
+            (world-food w)
+            (world-game-over? w)
+            (world-score w)
+            (world-record w)
+            (world-tick-counter w)
+            (world-obstacles w)
+            (world-free-spaces w)
+            #f)
+)]
  
           [(or (key=? key "right") (key=? key "D") (key=? key "d"))
            (if (symbol=? dir 'left) w
-               (make-world 'game (world-menu w) snake 'right (world-food w)
-                           (world-game-over? w) (world-score w) (world-record w)
-                           (world-tick-counter w) (world-obstacles w)))]
+               (make-world 'game
+            (world-menu w)
+            snake
+            'right   ; or 'down, 'left, 'right
+            (world-food w)
+            (world-game-over? w)
+            (world-score w)
+            (world-record w)
+            (world-tick-counter w)
+            (world-obstacles w)
+            (world-free-spaces w)
+            #f)
+)]
 
           [else w]))))
 
@@ -662,25 +755,26 @@
 
 (define (handle-key-unified w key)
   (cond
+    ;; ===== Menu =====
     [(symbol=? (world-mode w) 'menu)
      (cond
+       ;; Premendo SPACE parte il gioco
        [(key=? key " ")
-        (let* ([food (random-food initial-snake '())]
-               [obs (if (eq? (menu-mode (world-menu w)) 'Obstacles)
+        (let* ([menu-updated (world-menu w)]
+               [food (random-food initial-snake '())]
+               [obs (if (eq? (menu-mode menu-updated) 'Obstacles)
                         (generate-obstacles-safe initial-snake food)
                         '())]
-               [safe-food (if (member food obs)
-                              (random-food initial-snake obs)
-                              food)]
-               [size (menu-size (world-menu w))]
+               [size (menu-size menu-updated)]
                [outer (if (< size 25) (generate-outer-obstacles size) '())]
                [total-obstacles (append obs outer)]
-               [final-food (if (member safe-food total-obstacles)
+               [final-food (if (member food total-obstacles)
                                (random-food initial-snake total-obstacles)
-                               safe-food)])
+                               food)]
+               [free (count-free-spaces total-obstacles)])
           (make-world
            'game
-           (world-menu w)
+           menu-updated  ;; usa il menu aggiornato con la velocità scelta
            initial-snake
            initial-dir
            final-food
@@ -688,23 +782,68 @@
            0
            (world-record w)
            0
-           total-obstacles))]
+           total-obstacles
+           free
+           #f))]
        
+       ;; Tutti gli altri tasti modificano il menu
        [else
         (make-world
          'menu
-         (menu-key (world-menu w) key)
-         (world-snake w)
-         (world-dir w)
-         (world-food w)
-         (world-game-over? w)
-         (world-score w)
+         (menu-key (world-menu w) key)  ;; aggiorna il menu
+         initial-snake
+         initial-dir
+         initial-food
+         #f
+         0
          (world-record w)
-         (world-tick-counter w)
-         (world-obstacles w))])]
-    
+         0
+         '()
+         0
+         #f)])]
+
+    ;; ===== Game =====
     [(symbol=? (world-mode w) 'game)
-     (handle-key-game w key)]))
+     (cond
+       ;; Se il gioco è finito e premi spazio → torna al menu
+       [(and (or (eq? (world-game-over? w) #t)
+         (eq? (world-game-over? w) 'win))
+     (key=? key " "))
+
+        (make-world
+         'menu
+         (world-menu w)
+         initial-snake
+         initial-dir
+         initial-food
+         #f
+         0
+         (world-record w)
+         0
+         '()
+         0
+         #f)]
+
+       ;; Se premi "L" → score = free-spaces - 1
+       [(or (key=? key "l") (key=? key "L"))
+        (make-world 'game
+                    (world-menu w)
+                    (world-snake w)
+                    (world-dir w)
+                    (world-food w)
+                    (world-game-over? w)
+                    (- (world-free-spaces w) 1)  ; qui aggiorni lo score
+                    (world-record w)
+                    (world-tick-counter w)
+                    (world-obstacles w)
+                    (world-free-spaces w)
+                    #f)]
+
+       ;; Altrimenti gestisci normalmente i tasti del gioco
+       [else
+        (handle-key-game w key)])]))
+
+
 
 
 ;; ====================== ;; Tick Handler ;; ======================
@@ -714,14 +853,22 @@
 
 (define (update-game w)
   (cond
-    [(world-game-over? w) w]
-    [(symbol=? (world-dir w) 'none) w]
+    ;; gioco finito
+    [(or (eq? (world-game-over? w) #t)
+         (eq? (world-game-over? w) 'win))
+     w]
+
+    ;; serpente fermo
+    [(symbol=? (world-dir w) 'none)
+     w]
+
     [else
      (let* ([speed    (menu-speed (world-menu w))]
             [counter  (world-tick-counter w)]
             [threshold (inexact->exact (round (/ speed 0.02)))])
        
        (if (< counter threshold)
+           ;; ancora non muovere
            (make-world 'game
                        (world-menu w)
                        (world-snake w)
@@ -731,8 +878,11 @@
                        (world-score w)
                        (world-record w)
                        (add1 counter)
-                       (world-obstacles w))
+                       (world-obstacles w)
+                       (world-free-spaces w)
+                       #f)
            
+           ;; muovi il serpente
            (let* ([snake   (world-snake w)]
                   [dir     (world-dir w)]
                   [food    (world-food w)]
@@ -747,18 +897,35 @@
              (if ate?
                  (let* ([new-score (+ score 1)]
                         [new-record (max record new-score)]
-                        [new-food (random-food (list->vector new-snake) (world-obstacles w))])
-                   (make-world 'game
-                               (world-menu w)
-                               (list->vector new-snake)
-                               dir
-                               new-food
-                               #f
-                               new-score
-                               new-record
-                               0
-                               (world-obstacles w)))
+                        [new-food (random-food (list->vector new-snake) (world-obstacles w))]
+                        [win? (= new-score (world-free-spaces w))])
+                   (if win?
+                       (make-world 'game
+                                   (world-menu w)
+                                   (list->vector new-snake)
+                                   dir
+                                   new-food
+                                   'win     
+                                   new-score
+                                   new-record
+                                   0
+                                   (world-obstacles w)
+                                   (world-free-spaces w)
+                                   #f)
+                       (make-world 'game
+                                   (world-menu w)
+                                   (list->vector new-snake)
+                                   dir
+                                   new-food
+                                   #f
+                                   new-score
+                                   new-record
+                                   0
+                                   (world-obstacles w)
+                                   (world-free-spaces w)
+                                   #f)))
                  
+                 ;; serpente non mangia
                  (let ([shrunk (reverse (rest (reverse new-snake)))])
                    (if (or (wall-collision? new-head)
                            (self-collision? new-head (list->vector shrunk))
@@ -772,7 +939,9 @@
                                    score
                                    record
                                    0
-                                   (world-obstacles w))
+                                   (world-obstacles w)
+                                   (world-free-spaces w)
+                                   #f)
                        (make-world 'game
                                    (world-menu w)
                                    (list->vector shrunk)
@@ -782,34 +951,104 @@
                                    score
                                    record
                                    0
-                                   (world-obstacles w))))))))]))
+                                   (world-obstacles w)
+                                   (world-free-spaces w)
+                                   #f)))))))]))
 
 
 (define (update-unified w)
-  (if (symbol=? (world-mode w) 'game)
-      (update-game w)
-      w))
+  (if (or (symbol=? (world-mode w) 'menu)
+          (world-paused? w))
+      w
+      (update-game w)))
+
 
 ;; ====================== ;; Mouse Handler ;; ======================
-
 (define (handle-mouse-unified w x y event)
-  (if (and (symbol=? (world-mode w) 'game)
-           (string=? event "button-down")
-           (>= x (- (/ SCENE-WIDTH 2) (/ BUTTON-WIDTH 2)))
-           (<= x (+ (/ SCENE-WIDTH 2) (/ BUTTON-WIDTH 2)))
-           (>= y 0)
-           (<= y BUTTON-HEIGHT))
-      (make-world 'menu
-                  (world-menu w)
-                  initial-snake
-                  initial-dir
-                  initial-food
-                  #f
-                  0
-                  (world-record w)
-                  0
-                  '())
-      w))
+  (cond
+    ;; Click Restart
+[(and (symbol=? (world-mode w) 'game)
+      (string=? event "button-down")
+      (let* ([center-x (/ SCENE-WIDTH 2)]
+             [button-spacing 10]
+             [restart-x (- center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
+             [restart-left (- restart-x (/ BUTTON-WIDTH 2))]
+             [restart-right (+ restart-x (/ BUTTON-WIDTH 2))])
+        (and (>= x restart-left) (<= x restart-right)
+             (>= y 0) (<= y BUTTON-HEIGHT))))
+ (make-world 'menu
+             (world-menu w)
+             initial-snake
+             initial-dir
+             initial-food
+             #f
+             0
+             (world-record w)
+             0
+             '()
+             (count-free-spaces '())
+             #f)]
+
+;; Click Pause
+[(and (symbol=? (world-mode w) 'game)
+      (string=? event "button-down")
+      (let* ([center-x (/ SCENE-WIDTH 2)]
+             [button-spacing 10]
+             [pause-x (+ center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
+             [pause-left (- pause-x (/ BUTTON-WIDTH 2))]
+             [pause-right (+ pause-x (/ BUTTON-WIDTH 2))])
+        (and (>= x pause-left) (<= x pause-right)
+             (>= y 0) (<= y BUTTON-HEIGHT))))
+ (make-world 'game
+             (world-menu w)
+             (world-snake w)
+             (world-dir w)
+             (world-food w)
+             (world-game-over? w)
+             (world-score w)
+             (world-record w)
+             (world-tick-counter w)
+             (world-obstacles w)
+             (world-free-spaces w)
+             (not (world-paused? w)))]
+
+
+    [else w]))
+
+
+
+;; ======================
+;; Rendering Game Over Screen
+;; ======================
+(define (render-game-over w)
+  (place-image
+   (text "GAME OVER" 36 "red")
+   (/ TOTAL-WIDTH 2) 120
+   (place-image
+    (text (string-append "Final Score: " (number->string (world-score w))) 24 "white")
+    (/ TOTAL-WIDTH 2) 180
+    (place-image
+     (text (string-append "Record: " (number->string (world-record w))) 24 "yellow")
+     (/ TOTAL-WIDTH 2) 220
+     (place-image
+      (text "Press SPACE to return to menu" 22 "cyan")
+      (/ TOTAL-WIDTH 2) 280
+      (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black"))))))
+;; ======================
+;; Rendering Win Screen
+;; ======================
+(define (render-win w)
+  (place-image
+   (text "YOU WIN!" 40 "green")
+   (/ TOTAL-WIDTH 2) 120
+   (place-image
+    (text (string-append "Score: " (number->string (world-score w)))
+          28 "white")
+    (/ TOTAL-WIDTH 2) 200
+    (place-image
+     (text "Press SPACE to return to menu" 20 "yellow")
+     (/ TOTAL-WIDTH 2) 260
+     (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black")))))
 
 ;; ====================== ;; Unified Render ;; ======================
 
@@ -817,8 +1056,22 @@
   (cond
     [(symbol=? (world-mode w) 'menu)
      (render-menu (world-menu w))]
+
+    ;; Se il gioco è finito o vinto
+    [(or (eq? (world-game-over? w) #t)
+         (eq? (world-game-over? w) 'win))
+     (cond
+       [(eq? (world-game-over? w) 'win)
+        (render-win w)]
+       [else
+        (render-game-over w)])]
+
+    ;; Gioco in corso
     [(symbol=? (world-mode w) 'game)
      (render-game w)]))
+
+
+
 
 ;; ====================== ;; Initial World ;; ======================
 
@@ -832,7 +1085,10 @@
               initial-score
               initial-record
               0
-              '()))
+              '()
+              (count-free-spaces '())
+              #f)) ; free-spaces for menu, no obstacles
+
 
 ;; ====================== ;; Run Big-Bang ;; ======================
 
