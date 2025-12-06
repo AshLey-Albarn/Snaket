@@ -21,18 +21,18 @@
 (define SPEEDS-LIST (list 0.15 0.10 0.07))
 (define SPEED-LABELS '("Slow" "Normal" "Fast"))
 (define MODE-OPTIONS '(Plain Obstacles))
-(define SIZE-OPTIONS (list 15 20 25))
+(define SIZE-OPTIONS (list 16 20 24))
 
 
 ;size, cells and grid
-(define CELL-NUM-WIDTH 25)
-(define CELL-NUM-HEIGHT 25)
+(define CELL-NUM-WIDTH 24)
+(define CELL-NUM-HEIGHT 24)
 (define CELL-SIZE 20)
 (define BORDER-SIZE 10)             
 (define TOP-BORDER-SIZE (* 3 BORDER-SIZE))
 
-(define SCENE-WIDTH (* CELL-NUM-WIDTH CELL-SIZE))
-(define SCENE-HEIGHT (* CELL-NUM-HEIGHT CELL-SIZE))
+(define SCENE-WIDTH 480)
+(define SCENE-HEIGHT 480)
 (define TOTAL-WIDTH (+ SCENE-WIDTH (* 2 BORDER-SIZE)))
 (define TOTAL-HEIGHT (+ SCENE-HEIGHT TOP-BORDER-SIZE BORDER-SIZE))
 
@@ -214,13 +214,17 @@
   (+ (* (sub1 n) CELL-SIZE)
      (/ CELL-SIZE 2)))
 
-(define (draw-obstacles obstacles scene)
-  (foldl (lambda (p s)
-           (place-image OBSTACLE
-                        (cell-center (posn-x p))
-                        (cell-center (posn-y p))
-                        s))
-         scene obstacles))
+(define (draw-obstacles obstacles menu-size scene)
+  (let* ([offset (quotient (- CELL-NUM-WIDTH menu-size) 2)]
+         [start (+ offset 1)]
+         [end (- CELL-NUM-WIDTH offset)])
+    (foldl (lambda (p s)
+             (let ([is-outer (or (< (posn-x p) start) (> (posn-x p) end) (< (posn-y p) start) (> (posn-y p) end))])
+               (place-image (if is-outer (rectangle CELL-SIZE CELL-SIZE "solid" "red") OBSTACLE)
+                            (cell-center (posn-x p))
+                            (cell-center (posn-y p))
+                            s)))
+           scene obstacles)))
 
 (define (draw-tail prev tail scene color)
   (cond
@@ -279,7 +283,7 @@
   (let* ([color (menu-color (world-menu w))] 
          [inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
          [grid-scene (draw-grid inner-scene)]
-         [scene-with-obstacles (draw-obstacles (world-obstacles w) grid-scene)]
+         [scene-with-obstacles (draw-obstacles (world-obstacles w) (menu-size (world-menu w)) grid-scene)]
          [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles color)]  ;; Pass color
          [scene-with-food (draw-food (world-food w) scene-with-snake)]
          [final-inner
@@ -644,6 +648,16 @@
 
 
 
+(define (generate-outer-obstacles size)
+  (let* ([offset (quotient (- CELL-NUM-WIDTH size) 2)]
+         [start (+ offset 1)]
+         [end (- CELL-NUM-WIDTH offset)])
+    (let loop ([x 1] [y 1] [acc '()])
+      (cond [(> y CELL-NUM-HEIGHT) acc]
+            [(> x CELL-NUM-WIDTH) (loop 1 (add1 y) acc)]
+            [(or (< x start) (> x end) (< y start) (> y end)) (loop (add1 x) y (cons (make-posn x y) acc))]
+            [else (loop (add1 x) y acc)]))))
+
 
 
 (define (handle-key-unified w key)
@@ -656,20 +670,25 @@
                         (generate-obstacles-safe initial-snake food)
                         '())]
                [safe-food (if (member food obs)
-    (random-food initial-snake obs)
-    food)
-])
+                              (random-food initial-snake obs)
+                              food)]
+               [size (menu-size (world-menu w))]
+               [outer (if (< size 25) (generate-outer-obstacles size) '())]
+               [total-obstacles (append obs outer)]
+               [final-food (if (member safe-food total-obstacles)
+                               (random-food initial-snake total-obstacles)
+                               safe-food)])
           (make-world
            'game
            (world-menu w)
            initial-snake
            initial-dir
-           safe-food
+           final-food
            #f
            0
            (world-record w)
            0
-           obs))]
+           total-obstacles))]
        
        [else
         (make-world
