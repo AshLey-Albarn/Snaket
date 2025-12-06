@@ -8,8 +8,8 @@
 ;; ======================
 ;; Menu speed variable
 ;; ======================
-(define-struct menu (speed mode color))
-(define initial-menu (make-menu 0.10 'normal 'darkgreen))
+(define-struct menu (speed mode color size selector))
+(define initial-menu (make-menu 0.10 'Plain 'Darkgreen 20 'speed))
 
 ;; ======================
 ;; Constants
@@ -20,12 +20,13 @@
 
 (define SPEEDS-LIST (list 0.15 0.10 0.07))
 (define SPEED-LABELS '("Slow" "Normal" "Fast"))
-
+(define MODE-OPTIONS '(Plain Obstacles))
+(define SIZE-OPTIONS (list 15 20 25))
 
 
 ;size, cells and grid
-(define CELL-NUM-WIDTH 20)
-(define CELL-NUM-HEIGHT 20)
+(define CELL-NUM-WIDTH 25)
+(define CELL-NUM-HEIGHT 25)
 (define CELL-SIZE 20)
 (define BORDER-SIZE 10)             
 (define TOP-BORDER-SIZE (* 3 BORDER-SIZE))
@@ -40,10 +41,10 @@
 (define BUTTON-HEIGHT 30)
 
 ;Graphics
-(define COLOR-OPTIONS '(darkgreen red blue magenta yellow))
+(define COLOR-OPTIONS '(Darkgreen Red Blue Magenta Yellow))
+
 
 (define GRID-COLOR "gray")
-(define SNAKE-COLOR "darkgreen")
 (define TRANSPARENT (make-color 0 0 0 0))
 
 (define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 (circle 10 "solid" "white")))
@@ -298,28 +299,48 @@
 ;; Rendering Menu
 ;; ======================
 (define (render-menu m)
-  (place-image
-   (text "SNAKET" 24 "cyan")
-   (/ TOTAL-WIDTH 2) 80
-   (place-image
-    (text "Use W/S or up/down for speed, Q/E for mode" 18 "lightgray")
-    (/ TOTAL-WIDTH 2) 140
+  (let* ([sel (menu-selector m)]
+         [cx (/ TOTAL-WIDTH 2)]
+         ;; shifted downward
+         [title-y    (* TOTAL-HEIGHT 0.15)]
+         [subtitle-y (* TOTAL-HEIGHT 0.25)]
+         [speed-y    (* TOTAL-HEIGHT 0.40)]
+         [mode-y     (* TOTAL-HEIGHT 0.48)]
+         [size-y     (* TOTAL-HEIGHT 0.56)]
+         [color-y    (* TOTAL-HEIGHT 0.64)]
+         [start-y    (* TOTAL-HEIGHT 0.80)])
+    
     (place-image
-     (text (string-append "Current speed: " (speed-label (menu-speed m))) 20 "yellow")
-
-     (/ TOTAL-WIDTH 2) 200
+     (text "SNAKET" 24 "cyan") cx title-y
      (place-image
-      (text (string-append "Current mode: " (symbol->string (menu-mode m))) 20 "yellow")
-      (/ TOTAL-WIDTH 2) 230
+      (text "Use W/S to select, A/D to change" 18 "lightgray") cx subtitle-y
       (place-image
-       (text (string-append "Snake color: "
-                            (symbol->string (menu-color m)))
-             20 "yellow")
-       (/ TOTAL-WIDTH 2) 260
-      (place-image
-       (text "Press SPACEBAR to start" 22 "white")
-       (/ TOTAL-WIDTH 2) 290
-       (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black"))))))))
+       (text (string-append (if (eq? sel 'speed) ">> " "") 
+                            "Speed: " (speed-label (menu-speed m)))
+             20 (if (eq? sel 'speed) "yellow" "white"))
+       cx speed-y
+       (place-image
+        (text (string-append (if (eq? sel 'mode) ">> " "") 
+                             "Mode: " (symbol->string (menu-mode m)))
+              20 (if (eq? sel 'mode) "yellow" "white"))
+        cx mode-y
+        (place-image
+         (text (string-append (if (eq? sel 'size) ">> " "") 
+                              "Size: " (number->string (menu-size m)))
+               20 (if (eq? sel 'size) "yellow" "white"))
+         cx size-y
+         (place-image
+          (text (string-append (if (eq? sel 'color) ">> " "") 
+                               "Color: " (symbol->string (menu-color m)))
+                20 (if (eq? sel 'color) "yellow" "white"))
+          cx color-y
+          (place-image
+           (text "Press SPACEBAR to start" 22 "cyan") cx start-y
+           (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black"))))))))))
+
+
+
+
 
 ;; ======================
 ;; Key Handlers
@@ -332,43 +353,106 @@
         (list-ref SPEED-LABELS idx))))
 
 
-
 (define (menu-key m key)
-  (let* ([current-speed (menu-speed m)]
-         [idx (let ([i (index-of SPEEDS-LIST current-speed)])
-                (if (eq? i #f) 1 i))] ; fixed
-         [num-speeds (length SPEEDS-LIST)])
+  (let ([selectors '(speed mode size color)])
     (cond
-      ;; speed up (next step)
-      [(or (key=? key "right") (key=? key "W") (key=? key "w"))
-       (make-menu (list-ref SPEEDS-LIST (min (add1 idx) (sub1 num-speeds)))
-                  (menu-mode m)
-                  (menu-color m))]
-
-      ;; slow down (previous step)
-      [(or (key=? key "left") (key=? key "S") (key=? key "s"))
-       (make-menu (list-ref SPEEDS-LIST (max 0 (sub1 idx)))
-                  (menu-mode m)
-                  (menu-color m))]
-
-      ;; toggle mode
-      [(or (key=? key "q") (key=? key "Q") (key=? key "e") (key=? key "E"))
-       (let ([new-mode (if (eq? (menu-mode m) 'normal) 'obstacles 'normal)])
-         (make-menu (menu-speed m) new-mode (menu-color m)))]
-
-      ;; cycle snake color backward
+      ;; W/S to cycle selector
+      [(or (key=? key "w") (key=? key "W"))
+       (let* ([current (menu-selector m)]
+              [idx (index-of selectors current)]
+              [new-idx (modulo (sub1 idx) (length selectors))])
+         (make-menu (menu-speed m)
+                    (menu-mode m)
+                    (menu-color m)
+                    (menu-size m)
+                    (list-ref selectors new-idx)))]
+      
+      [(or (key=? key "s") (key=? key "S"))
+       (let* ([current (menu-selector m)]
+              [idx (index-of selectors current)]
+              [new-idx (modulo (add1 idx) (length selectors))])
+         (make-menu (menu-speed m)
+                    (menu-mode m)
+                    (menu-color m)
+                    (menu-size m)
+                    (list-ref selectors new-idx)))]
+      
+      ;; A/D to adjust selected option
       [(or (key=? key "a") (key=? key "A"))
-       (let* ([color-idx (index-of COLOR-OPTIONS (menu-color m))]
-              [prev-idx (modulo (- color-idx 1) (length COLOR-OPTIONS))]
-              [new-color (list-ref COLOR-OPTIONS prev-idx)])
-         (make-menu (menu-speed m) (menu-mode m) new-color))]
+       (cond
+         [(eq? (menu-selector m) 'speed)
+          (let* ([idx (index-of SPEEDS-LIST (menu-speed m))]
+                 [new-idx (modulo (sub1 idx) (length SPEEDS-LIST))])
+            (make-menu (list-ref SPEEDS-LIST new-idx)
+                       (menu-mode m)
+                       (menu-color m)
+                       (menu-size m)
+                       'speed))]
 
-      ;; cycle snake color forward
+         [(eq? (menu-selector m) 'mode)
+          (let* ([idx (index-of MODE-OPTIONS (menu-mode m))]
+                 [new-idx (modulo (sub1 idx) (length MODE-OPTIONS))])
+            (make-menu (menu-speed m)
+                       (list-ref MODE-OPTIONS new-idx)
+                       (menu-color m)
+                       (menu-size m)
+                       'mode))]
+
+         [(eq? (menu-selector m) 'size)
+          (let* ([idx (index-of SIZE-OPTIONS (menu-size m))]
+                 [new-idx (modulo (sub1 idx) (length SIZE-OPTIONS))])
+            (make-menu (menu-speed m)
+                       (menu-mode m)
+                       (menu-color m)
+                       (list-ref SIZE-OPTIONS new-idx)
+                       'size))]
+
+         [(eq? (menu-selector m) 'color)
+          (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
+                 [new-idx (modulo (sub1 idx) (length COLOR-OPTIONS))])
+            (make-menu (menu-speed m)
+                       (menu-mode m)
+                       (list-ref COLOR-OPTIONS new-idx)
+                       (menu-size m)
+                       'color))])]
+
       [(or (key=? key "d") (key=? key "D"))
-       (let* ([color-idx (index-of COLOR-OPTIONS (menu-color m))]
-              [next-idx (modulo (+ color-idx 1) (length COLOR-OPTIONS))]
-              [new-color (list-ref COLOR-OPTIONS next-idx)])
-         (make-menu (menu-speed m) (menu-mode m) new-color))]
+       (cond
+         [(eq? (menu-selector m) 'speed)
+          (let* ([idx (index-of SPEEDS-LIST (menu-speed m))]
+                 [new-idx (modulo (add1 idx) (length SPEEDS-LIST))])
+            (make-menu (list-ref SPEEDS-LIST new-idx)
+                       (menu-mode m)
+                       (menu-color m)
+                       (menu-size m)
+                       'speed))]
+
+         [(eq? (menu-selector m) 'mode)
+          (let* ([idx (index-of MODE-OPTIONS (menu-mode m))]
+                 [new-idx (modulo (add1 idx) (length MODE-OPTIONS))])
+            (make-menu (menu-speed m)
+                       (list-ref MODE-OPTIONS new-idx)
+                       (menu-color m)
+                       (menu-size m)
+                       'mode))]
+
+         [(eq? (menu-selector m) 'size)
+          (let* ([idx (index-of SIZE-OPTIONS (menu-size m))]
+                 [new-idx (modulo (add1 idx) (length SIZE-OPTIONS))])
+            (make-menu (menu-speed m)
+                       (menu-mode m)
+                       (menu-color m)
+                       (list-ref SIZE-OPTIONS new-idx)
+                       'size))]
+
+         [(eq? (menu-selector m) 'color)
+          (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
+                 [new-idx (modulo (add1 idx) (length COLOR-OPTIONS))])
+            (make-menu (menu-speed m)
+                       (menu-mode m)
+                       (list-ref COLOR-OPTIONS new-idx)
+                       (menu-size m)
+                       'color))])]
 
       [else m])))
 
@@ -562,14 +646,13 @@
 
 
 
-
 (define (handle-key-unified w key)
   (cond
     [(symbol=? (world-mode w) 'menu)
      (cond
        [(key=? key " ")
         (let* ([food (random-food initial-snake '())]
-               [obs (if (eq? (menu-mode (world-menu w)) 'obstacles)
+               [obs (if (eq? (menu-mode (world-menu w)) 'Obstacles)
                         (generate-obstacles-safe initial-snake food)
                         '())]
                [safe-food (if (member food obs)
@@ -603,7 +686,6 @@
     
     [(symbol=? (world-mode w) 'game)
      (handle-key-game w key)]))
-
 
 
 ;; ====================== ;; Tick Handler ;; ======================
