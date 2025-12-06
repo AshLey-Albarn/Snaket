@@ -8,8 +8,8 @@
 ;; ======================
 ;; Menu speed variable
 ;; ======================
-(define-struct menu (speed mode color size selector))
-(define initial-menu (make-menu 0.10 'Plain 'Darkgreen 20 'speed))
+(define-struct menu (speed mode color size selector num-fruits))
+(define initial-menu (make-menu 0.10 'Plain 'Darkgreen 20 'speed 1))
 
 ;; ======================
 ;; Constants
@@ -77,14 +77,14 @@
 ;; ======================
 ;; Data Structures
 ;; ======================
-(define-struct world (mode menu snake dir food game-over? score record tick-counter obstacles free-spaces paused?))
+(define-struct world (mode menu snake dir foods game-over? score record tick-counter obstacles free-spaces paused?))
 
 ;; ======================
 ;; Initial Game Data
 ;; ======================
-(define initial-snake (vector (make-posn 5 10)))
+(define initial-snake (vector (make-posn 7 12)))
 (define initial-dir 'none)
-(define initial-food (make-posn 15 10))
+(define initial-foods (vector (make-posn 15 12)))
 (define initial-score 0)
 (define initial-record 0)
 
@@ -113,20 +113,25 @@
             (loop (add1 i))))))
 
 ;creates food in random places
-(define (random-food snake obstacles)
-  (let ([p (make-posn (+ 1 (random (- CELL-NUM-WIDTH 2)))
-                      (+ 1 (random (- CELL-NUM-HEIGHT 2))))])
-    (if (or
-         ;; food must not be inside the snake
-         (let loop ([i 0])
-           (if (>= i (vector-length snake))
-               #f
-               (or (equal? (vector-ref snake i) p)
-                   (loop (add1 i)))))
-         ;; food must not be inside an obstacle
-         (member p obstacles))
-        (random-food snake obstacles)
-        p)))
+(define (random-foods snake obstacles n)
+  (let loop ([count n] [acc '()])
+    (if (= count 0)
+        (list->vector acc)
+        (let* ([p (make-posn (+ 1 (random (- CELL-NUM-WIDTH 2)))
+                              (+ 1 (random (- CELL-NUM-HEIGHT 2))))]
+               [occupied? (or (member p obstacles)
+                              (let loop2 ([i 0])
+                                (if (>= i (vector-length snake)) #f
+                                    (or (equal? (vector-ref snake i) p)
+                                        (loop2 (add1 i)))))
+                              (member p acc))])
+          (if occupied?
+              ;; check if there’s still any free space
+              (if (>= (count-free-spaces obstacles) (vector-length snake))
+                  (loop count acc)   ; try again
+                  (list->vector acc)) ; no free space, return what we have
+              (loop (sub1 count) (cons p acc)))))))
+
 
 ;creates free spaces
 (define (count-free-spaces obstacles)
@@ -268,11 +273,20 @@
                              scene-with-tail)])
           scene-with-head))))
 
-(define (draw-food food scene)
-  (place-image FRUIT
-               (cell-center (posn-x food))
-               (cell-center (posn-y food))
-               scene))
+(define (draw-foods foods scene)
+  (let loop ([i 0] [s scene])
+    (if (>= i (vector-length foods))
+        s
+        (let ([f (vector-ref foods i)]) ; f è un singolo posn
+          (loop (add1 i)
+                (place-image FRUIT
+                             (cell-center (posn-x f))
+                             (cell-center (posn-y f))
+                             s))))))
+
+
+
+
 
 (define (create-score-bar score record paused?)
   (let* ([score-text  (text (string-append "Score: " (number->string score)) 18 "white")]
@@ -327,7 +341,7 @@
          [grid-scene (draw-grid inner-scene)]
          [scene-with-obstacles (draw-obstacles (world-obstacles w) (menu-size (world-menu w)) grid-scene)]
          [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles color)]
-         [scene-with-food (draw-food (world-food w) scene-with-snake)]
+         [scene-with-food (draw-foods (world-foods w) scene-with-snake)]
          [final-inner
           (if (world-game-over? w)
               (overlay (text "Game Over" 24 "red") scene-with-food)
@@ -355,7 +369,9 @@
          [mode-y     (* TOTAL-HEIGHT 0.48)]
          [size-y     (* TOTAL-HEIGHT 0.56)]
          [color-y    (* TOTAL-HEIGHT 0.64)]
-         [start-y    (* TOTAL-HEIGHT 0.80)])
+         [fruits-y   (* TOTAL-HEIGHT 0.72)]
+         [start-y    (* TOTAL-HEIGHT 0.80)]
+         [bg         (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black")])
     
     (place-image
      (text "SNAKET" 24 "cyan") cx title-y
@@ -382,8 +398,14 @@
                 20 (if (eq? sel 'color) "yellow" "white"))
           cx color-y
           (place-image
-           (text "Press SPACEBAR to start" 22 "cyan") cx start-y
-           (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black"))))))))))
+           (text (string-append (if (eq? sel 'num-fruits) ">> " "")
+                     "Fruits: " (number->string (menu-num-fruits m)))
+                 20 (if (eq? sel 'num-fruits) "yellow" "white"))
+           cx fruits-y
+           (place-image
+            (text "Press SPACEBAR to start" 22 "cyan") cx start-y
+            bg))))))))))
+
 
 
 
@@ -401,107 +423,160 @@
 
 
 (define (menu-key m key)
-  (let ([selectors '(speed mode size color)])
+  (let ([selectors '(speed mode size color num-fruits)])
     (cond
-      ;; W/S to cycle selector
+      ;; W/S per cambiare selezione
       [(or (key=? key "w") (key=? key "W"))
        (let* ([current (menu-selector m)]
               [idx (index-of selectors current)]
-              [new-idx (modulo (sub1 idx) (length selectors))])
+              [new-idx (if (= idx 0)
+                           (- (length selectors) 1)
+                           (sub1 idx))])
          (make-menu (menu-speed m)
                     (menu-mode m)
                     (menu-color m)
                     (menu-size m)
-                    (list-ref selectors new-idx)))]
+                    (list-ref selectors new-idx)
+                    (menu-num-fruits m)))]
       
       [(or (key=? key "s") (key=? key "S"))
        (let* ([current (menu-selector m)]
               [idx (index-of selectors current)]
-              [new-idx (modulo (add1 idx) (length selectors))])
+              [new-idx (if (= idx (- (length selectors) 1))
+                           0
+                           (add1 idx))])
          (make-menu (menu-speed m)
                     (menu-mode m)
                     (menu-color m)
                     (menu-size m)
-                    (list-ref selectors new-idx)))]
+                    (list-ref selectors new-idx)
+                    (menu-num-fruits m)))]
       
-      ;; A/D to adjust selected option
+      ;; A per diminuire il valore dell'opzione selezionata
       [(or (key=? key "a") (key=? key "A"))
        (cond
          [(eq? (menu-selector m) 'speed)
           (let* ([idx (index-of SPEEDS-LIST (menu-speed m))]
-                 [new-idx (modulo (sub1 idx) (length SPEEDS-LIST))])
+                 [new-idx (if (= idx 0)
+                              (- (length SPEEDS-LIST) 1)
+                              (sub1 idx))])
             (make-menu (list-ref SPEEDS-LIST new-idx)
                        (menu-mode m)
                        (menu-color m)
                        (menu-size m)
-                       'speed))]
-
+                       'speed
+                       (menu-num-fruits m)))]
+         
          [(eq? (menu-selector m) 'mode)
           (let* ([idx (index-of MODE-OPTIONS (menu-mode m))]
-                 [new-idx (modulo (sub1 idx) (length MODE-OPTIONS))])
+                 [new-idx (if (= idx 0)
+                              (- (length MODE-OPTIONS) 1)
+                              (sub1 idx))])
             (make-menu (menu-speed m)
                        (list-ref MODE-OPTIONS new-idx)
                        (menu-color m)
                        (menu-size m)
-                       'mode))]
-
+                       'mode
+                       (menu-num-fruits m)))]
+         
          [(eq? (menu-selector m) 'size)
           (let* ([idx (index-of SIZE-OPTIONS (menu-size m))]
-                 [new-idx (modulo (sub1 idx) (length SIZE-OPTIONS))])
+                 [new-idx (if (= idx 0)
+                              (- (length SIZE-OPTIONS) 1)
+                              (sub1 idx))])
             (make-menu (menu-speed m)
                        (menu-mode m)
                        (menu-color m)
                        (list-ref SIZE-OPTIONS new-idx)
-                       'size))]
-
+                       'size
+                       (menu-num-fruits m)))]
+         
          [(eq? (menu-selector m) 'color)
           (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
-                 [new-idx (modulo (sub1 idx) (length COLOR-OPTIONS))])
+                 [new-idx (if (= idx 0)
+                              (- (length COLOR-OPTIONS) 1)
+                              (sub1 idx))])
             (make-menu (menu-speed m)
                        (menu-mode m)
                        (list-ref COLOR-OPTIONS new-idx)
                        (menu-size m)
-                       'color))])]
-
+                       'color
+                       (menu-num-fruits m)))]
+         
+         [(eq? (menu-selector m) 'num-fruits)
+          (let* ([n (menu-num-fruits m)]
+                [new-n (if (= n 1) 5 (sub1 n))]) ; cicla 1-5
+            (make-menu (menu-speed m)
+                       (menu-mode m)
+                       (menu-color m)
+                       (menu-size m)
+                       'num-fruits
+                       new-n))])]
+      
+      ;; D per aumentare il valore dell'opzione selezionata
       [(or (key=? key "d") (key=? key "D"))
        (cond
          [(eq? (menu-selector m) 'speed)
           (let* ([idx (index-of SPEEDS-LIST (menu-speed m))]
-                 [new-idx (modulo (add1 idx) (length SPEEDS-LIST))])
+                 [new-idx (if (= idx (- (length SPEEDS-LIST) 1))
+                              0
+                              (add1 idx))])
             (make-menu (list-ref SPEEDS-LIST new-idx)
                        (menu-mode m)
                        (menu-color m)
                        (menu-size m)
-                       'speed))]
-
+                       'speed
+                       (menu-num-fruits m)))]
+         
          [(eq? (menu-selector m) 'mode)
           (let* ([idx (index-of MODE-OPTIONS (menu-mode m))]
-                 [new-idx (modulo (add1 idx) (length MODE-OPTIONS))])
+                 [new-idx (if (= idx (- (length MODE-OPTIONS) 1))
+                              0
+                              (add1 idx))])
             (make-menu (menu-speed m)
                        (list-ref MODE-OPTIONS new-idx)
                        (menu-color m)
                        (menu-size m)
-                       'mode))]
-
+                       'mode
+                       (menu-num-fruits m)))]
+         
          [(eq? (menu-selector m) 'size)
           (let* ([idx (index-of SIZE-OPTIONS (menu-size m))]
-                 [new-idx (modulo (add1 idx) (length SIZE-OPTIONS))])
+                 [new-idx (if (= idx (- (length SIZE-OPTIONS) 1))
+                              0
+                              (add1 idx))])
             (make-menu (menu-speed m)
                        (menu-mode m)
                        (menu-color m)
                        (list-ref SIZE-OPTIONS new-idx)
-                       'size))]
-
+                       'size
+                       (menu-num-fruits m)))]
+         
          [(eq? (menu-selector m) 'color)
           (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
-                 [new-idx (modulo (add1 idx) (length COLOR-OPTIONS))])
+                 [new-idx (if (= idx (- (length COLOR-OPTIONS) 1))
+                              0
+                              (add1 idx))])
             (make-menu (menu-speed m)
                        (menu-mode m)
                        (list-ref COLOR-OPTIONS new-idx)
                        (menu-size m)
-                       'color))])]
-
+                       'color
+                       (menu-num-fruits m)))]
+         
+         [(eq? (menu-selector m) 'num-fruits)
+          (let* ([n (menu-num-fruits m)]
+                [new-n (if (= n 5) 1 (add1 n))]) ; cicla 1-5
+            (make-menu (menu-speed m)
+                       (menu-mode m)
+                       (menu-color m)
+                       (menu-size m)
+                       'num-fruits
+                       new-n))])]
+      
+      ;; nessun cambiamento
       [else m])))
+
 
 
 
@@ -515,7 +590,7 @@
             (world-menu w)
             snake
             'right
-            (world-food w)
+            (world-foods w)
             (world-game-over? w)
             (world-score w)
             (world-record w)
@@ -532,7 +607,7 @@
             (world-menu w)
             snake
             'up   ; or 'down, 'left, 'right
-            (world-food w)
+            (world-foods w)
             (world-game-over? w)
             (world-score w)
             (world-record w)
@@ -548,7 +623,7 @@
             (world-menu w)
             snake
             'down   ; or 'down, 'left, 'right
-            (world-food w)
+            (world-foods w)
             (world-game-over? w)
             (world-score w)
             (world-record w)
@@ -564,7 +639,7 @@
             (world-menu w)
             snake
             'left   ; or 'down, 'left, 'right
-            (world-food w)
+            (world-foods w)
             (world-game-over? w)
             (world-score w)
             (world-record w)
@@ -580,7 +655,7 @@
             (world-menu w)
             snake
             'right   ; or 'down, 'left, 'right
-            (world-food w)
+            (world-foods w)
             (world-game-over? w)
             (world-score w)
             (world-record w)
@@ -760,40 +835,46 @@
      (cond
        ;; Premendo SPACE parte il gioco
        [(key=? key " ")
-        (let* ([menu-updated (world-menu w)]
-               [food (random-food initial-snake '())]
-               [obs (if (eq? (menu-mode menu-updated) 'Obstacles)
-                        (generate-obstacles-safe initial-snake food)
-                        '())]
-               [size (menu-size menu-updated)]
-               [outer (if (< size 25) (generate-outer-obstacles size) '())]
-               [total-obstacles (append obs outer)]
-               [final-food (if (member food total-obstacles)
-                               (random-food initial-snake total-obstacles)
-                               food)]
-               [free (count-free-spaces total-obstacles)])
-          (make-world
-           'game
-           menu-updated  ;; usa il menu aggiornato con la velocità scelta
-           initial-snake
-           initial-dir
-           final-food
-           #f
-           0
-           (world-record w)
-           0
-           total-obstacles
-           free
-           #f))]
+  (let* ([menu-updated (world-menu w)]
+         [num-fruits   (menu-num-fruits menu-updated)]
+         [foods        (random-foods initial-snake '() num-fruits)] ; generate all fruits
+         [obs          (if (eq? (menu-mode menu-updated) 'Obstacles)
+                           (generate-obstacles-safe initial-snake foods)
+                           '())]
+         [size         (menu-size menu-updated)]
+         [outer        (if (< size 25) (generate-outer-obstacles size) '())]
+         [total-obstacles (append obs outer)]
+         ;; if any food spawned inside obstacles, regenerate individually
+         [final-foods  (list->vector
+                        (map (lambda (f)
+                               (if (member f total-obstacles)
+                                   (vector-ref (random-foods initial-snake total-obstacles 1) 0)
+                                   f))
+                             (vector->list foods)))]
+         [free (count-free-spaces total-obstacles)])
+    (make-world
+     'game
+     menu-updated
+     initial-snake
+     initial-dir
+     final-foods
+     #f
+     0
+     (world-record w)
+     0
+     total-obstacles
+     free
+     #f))]
+
        
        ;; Tutti gli altri tasti modificano il menu
        [else
         (make-world
          'menu
-         (menu-key (world-menu w) key)  ;; aggiorna il menu
+         (menu-key (world-menu w) key)
          initial-snake
          initial-dir
-         initial-food
+         initial-foods
          #f
          0
          (world-record w)
@@ -805,17 +886,16 @@
     ;; ===== Game =====
     [(symbol=? (world-mode w) 'game)
      (cond
-       ;; Se il gioco è finito e premi spazio → torna al menu
+       ;; Se il gioco è finito e premi SPACE → torna al menu
        [(and (or (eq? (world-game-over? w) #t)
-         (eq? (world-game-over? w) 'win))
-     (key=? key " "))
-
+                 (eq? (world-game-over? w) 'win))
+             (key=? key " "))
         (make-world
          'menu
          (world-menu w)
          initial-snake
          initial-dir
-         initial-food
+         initial-foods
          #f
          0
          (world-record w)
@@ -826,22 +906,24 @@
 
        ;; Se premi "L" → score = free-spaces - 1
        [(or (key=? key "l") (key=? key "L"))
-        (make-world 'game
-                    (world-menu w)
-                    (world-snake w)
-                    (world-dir w)
-                    (world-food w)
-                    (world-game-over? w)
-                    (- (world-free-spaces w) 1)  ; qui aggiorni lo score
-                    (world-record w)
-                    (world-tick-counter w)
-                    (world-obstacles w)
-                    (world-free-spaces w)
-                    #f)]
+        (make-world
+         'game
+         (world-menu w)
+         (world-snake w)
+         (world-dir w)
+         (world-foods w)
+         (world-game-over? w)
+         (- (world-free-spaces w) 1)
+         (world-record w)
+         (world-tick-counter w)
+         (world-obstacles w)
+         (world-free-spaces w)
+         #f)]
 
        ;; Altrimenti gestisci normalmente i tasti del gioco
        [else
         (handle-key-game w key)])]))
+
 
 
 
@@ -851,6 +933,33 @@
 (define (obstacle-collision? head obstacles)
   (member head obstacles))
 
+;; Helper: replace an element at a given index in a vector
+(define (replace-food-at-index foods idx new-food)
+  (let* ([n (vector-length foods)]
+         [result (make-vector n)])
+    (let loop ([i 0])
+      (if (< i n)
+          (begin
+            (vector-set! result i (if (= i idx) new-food (vector-ref foods i)))
+            (loop (add1 i)))
+          result))))
+
+
+
+
+
+
+;; Helper: find index of an element in a vector that satisfies a predicate
+(define (vector-index pred vec)
+  (let loop ([i 0])
+    (cond
+      [(>= i (vector-length vec)) #f]
+      [(pred (vector-ref vec i)) i]
+      [else (loop (add1 i))])))
+
+;; =========================
+;; Update game function
+;; =========================
 (define (update-game w)
   (cond
     ;; gioco finito
@@ -863,97 +972,122 @@
      w]
 
     [else
-     (let* ([speed    (menu-speed (world-menu w))]
-            [counter  (world-tick-counter w)]
+     (let* ([speed     (menu-speed (world-menu w))]
+            [counter   (world-tick-counter w)]
             [threshold (inexact->exact (round (/ speed 0.02)))])
        
-       (if (< counter threshold)
-           ;; ancora non muovere
-           (make-world 'game
-                       (world-menu w)
-                       (world-snake w)
-                       (world-dir w)
-                       (world-food w)
-                       #f
-                       (world-score w)
-                       (world-record w)
-                       (add1 counter)
-                       (world-obstacles w)
-                       (world-free-spaces w)
-                       #f)
-           
-           ;; muovi il serpente
-           (let* ([snake   (world-snake w)]
-                  [dir     (world-dir w)]
-                  [food    (world-food w)]
-                  [score   (world-score w)]
-                  [record  (world-record w)]
-                  [head    (vector-ref snake 0)]
-                  [new-head (move-head head dir)]
-                  [snake-list (vector->list snake)]
-                  [new-snake (cons new-head snake-list)]
-                  [ate? (equal? new-head food)])
-             
-             (if ate?
-                 (let* ([new-score (+ score 1)]
-                        [new-record (max record new-score)]
-                        [new-food (random-food (list->vector new-snake) (world-obstacles w))]
-                        [win? (= new-score (world-free-spaces w))])
-                   (if win?
-                       (make-world 'game
-                                   (world-menu w)
-                                   (list->vector new-snake)
-                                   dir
-                                   new-food
-                                   'win     
-                                   new-score
-                                   new-record
-                                   0
-                                   (world-obstacles w)
-                                   (world-free-spaces w)
-                                   #f)
-                       (make-world 'game
-                                   (world-menu w)
-                                   (list->vector new-snake)
-                                   dir
-                                   new-food
-                                   #f
-                                   new-score
-                                   new-record
-                                   0
-                                   (world-obstacles w)
-                                   (world-free-spaces w)
-                                   #f)))
-                 
-                 ;; serpente non mangia
-                 (let ([shrunk (reverse (rest (reverse new-snake)))])
-                   (if (or (wall-collision? new-head)
-                           (self-collision? new-head (list->vector shrunk))
-                           (obstacle-collision? new-head (world-obstacles w)))
-                       (make-world 'game
-                                   (world-menu w)
-                                   snake
-                                   dir
-                                   food
-                                   #t
-                                   score
-                                   record
-                                   0
-                                   (world-obstacles w)
-                                   (world-free-spaces w)
-                                   #f)
-                       (make-world 'game
-                                   (world-menu w)
-                                   (list->vector shrunk)
-                                   dir
-                                   food
-                                   #f
-                                   score
-                                   record
-                                   0
-                                   (world-obstacles w)
-                                   (world-free-spaces w)
-                                   #f)))))))]))
+       (cond
+         ;; ancora non muovere
+         [(< counter threshold)
+          (make-world 'game
+                      (world-menu w)
+                      (world-snake w)
+                      (world-dir w)
+                      (world-foods w)
+                      #f
+                      (world-score w)
+                      (world-record w)
+                      (add1 counter)
+                      (world-obstacles w)
+                      (world-free-spaces w)
+                      #f)]
+         
+         ;; muovi il serpente
+         [else
+          (let* ([snake      (world-snake w)]
+                 [dir        (world-dir w)]
+                 [foods      (world-foods w)]
+                 [score      (world-score w)]
+                 [record     (world-record w)]
+                 [head       (vector-ref snake 0)]
+                 [new-head   (move-head head dir)]
+                 [snake-list (vector->list snake)]
+                 [new-snake  (cons new-head snake-list)]
+                 ;; trova indice del frutto mangiato, se presente
+                 [ate-index
+                  (let loop ([i 0])
+                    (cond
+                      [(>= i (vector-length foods)) #f]
+                      [(equal? new-head (vector-ref foods i)) i]
+                      [else (loop (add1 i))]))])
+            
+            (cond
+  ;; serpente ha mangiato un frutto
+  [(not (eq? ate-index #f))
+ (let* ([new-score  (+ score 1)]
+        [new-record (max record new-score)]
+        ;; generate only one new fruit for the eaten index
+        [new-food   (vector-ref (random-foods (list->vector new-snake)
+                                              (world-obstacles w) 1) 0)]
+        ;; replace only the eaten fruit in the vector
+        [new-foods  (replace-food-at-index foods ate-index new-food)]
+        [win?       (= new-score (world-free-spaces w))])
+   (if win?
+       (make-world 'game
+                   (world-menu w)
+                   (list->vector new-snake)
+                   dir
+                   new-foods
+                   'win
+                   new-score
+                   new-record
+                   0
+                   (world-obstacles w)
+                   (world-free-spaces w)
+                   #f)
+       (make-world 'game
+                   (world-menu w)
+                   (list->vector new-snake)
+                   dir
+                   new-foods
+                   #f
+                   new-score
+                   new-record
+                   0
+                   (world-obstacles w)
+                   (world-free-spaces w)
+                   #f)))]
+
+              
+              ;; serpente non mangia
+[else
+ (let ([shrunk (reverse (rest (reverse new-snake)))])
+   (letrec ([collides-with-food?
+             (lambda (head foods idx)
+               (cond
+                 [(>= idx (vector-length foods)) #f]
+                 [(equal? head (vector-ref foods idx)) #t]
+                 [else (collides-with-food? head foods (add1 idx))]))])
+     (if (or (wall-collision? new-head)
+             (self-collision? new-head (list->vector shrunk))
+             (collides-with-food? new-head foods 0)
+             (obstacle-collision? new-head (world-obstacles w)))
+         (make-world 'game
+                     (world-menu w)
+                     snake
+                     dir
+                     foods
+                     #t
+                     score
+                     record
+                     0
+                     (world-obstacles w)
+                     (world-free-spaces w)
+                     #f)
+         (make-world 'game
+                     (world-menu w)
+                     (list->vector shrunk)
+                     dir
+                     foods
+                     #f
+                     score
+                     record
+                     0
+                     (world-obstacles w)
+                     (world-free-spaces w)
+                     #f))))]
+))]))]))
+
 
 
 (define (update-unified w)
@@ -980,7 +1114,7 @@
              (world-menu w)
              initial-snake
              initial-dir
-             initial-food
+             initial-foods
              #f
              0
              (world-record w)
@@ -1003,7 +1137,7 @@
              (world-menu w)
              (world-snake w)
              (world-dir w)
-             (world-food w)
+             (world-foods w)
              (world-game-over? w)
              (world-score w)
              (world-record w)
@@ -1080,7 +1214,7 @@
               initial-menu
               initial-snake
               initial-dir
-              initial-food
+              initial-foods
               #f
               initial-score
               initial-record
