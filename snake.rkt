@@ -20,7 +20,7 @@
 
 (define SPEEDS-LIST (list 0.15 0.10 0.07 0.03))
 (define SPEED-LABELS '("Slow" "Normal" "Fast" "Crazy"))
-(define MODE-OPTIONS '(Plain Obstacles))
+(define MODE-OPTIONS '(Plain Obstacles Pacman))
 (define SIZE-OPTIONS (list 16 20 24))
 
 
@@ -146,11 +146,22 @@
 
 ;returns either 'up 'down 'left 'right based on the x's and y's
 (define (direction from to)
-  (let ([dx (- (posn-x to) (posn-x from))]
-        [dy (- (posn-y to) (posn-y from))])
-    (cond [(= dx 0) (if (< dy 0) 'up 'down)]
-          [(= dy 0) (if (< dx 0) 'left 'right)]
+  (let* ([dx (- (posn-x to) (posn-x from))]
+         [dy (- (posn-y to) (posn-y from))]
+
+         ;; handle wrap-around horizontally
+         [dx-wrap (cond [(> dx (/ CELL-NUM-WIDTH 2)) (- dx CELL-NUM-WIDTH)]
+                        [(< dx (- (/ CELL-NUM-WIDTH 2))) (+ dx CELL-NUM-WIDTH)]
+                        [else dx])]
+
+         ;; handle wrap-around vertically
+         [dy-wrap (cond [(> dy (/ CELL-NUM-HEIGHT 2)) (- dy CELL-NUM-HEIGHT)]
+                        [(< dy (- (/ CELL-NUM-HEIGHT 2))) (+ dy CELL-NUM-HEIGHT)]
+                        [else dy])])
+    (cond [(= dx-wrap 0) (if (< dy-wrap 0) 'up 'down)]
+          [(= dy-wrap 0) (if (< dx-wrap 0) 'left 'right)]
           [else 'none])))
+
 
 (define (vertical? dir)
   (or (eq? dir 'up) (eq? dir 'down)))
@@ -667,6 +678,43 @@
 
           [else w]))))
 
+
+
+
+;; ======================
+;; Wrap-around helper
+;; ======================
+(define (active-grid-bounds size)
+  (let* ([offset (quotient (- CELL-NUM-WIDTH size) 2)]
+         [min-cell (+ offset 1)]
+         [max-cell (- CELL-NUM-WIDTH offset)])
+    (list min-cell max-cell min-cell max-cell))) ; min-x, max-x, min-y, max-y
+ ; min-x, max-x, min-y, max-y
+
+(define (wrap-head head size)
+  (let ([bounds (active-grid-bounds size)])
+    (let ([min-x (list-ref bounds 0)]
+          [max-x (list-ref bounds 1)]
+          [min-y (list-ref bounds 2)]
+          [max-y (list-ref bounds 3)]
+          [x (posn-x head)]
+          [y (posn-y head)])
+      (make-posn
+       (cond [(< x min-x) max-x]
+             [(> x max-x) min-x]
+             [else x])
+       (cond [(< y min-y) max-y]
+             [(> y max-y) min-y]
+             [else y])))))
+
+
+
+
+
+
+
+
+
 ;; ======================
 ;; Helper: Valid position (inside grid, not on snake, food, or obstacle)
 ;; ======================
@@ -976,117 +1024,107 @@
             [counter   (world-tick-counter w)]
             [threshold (inexact->exact (round (/ speed 0.02)))])
        
-       (cond
-         ;; ancora non muovere
-         [(< counter threshold)
+       (if (< counter threshold)
+           ;; ancora non muovere
+           (make-world 'game
+                       (world-menu w)
+                       (world-snake w)
+                       (world-dir w)
+                       (world-foods w)
+                       #f
+                       (world-score w)
+                       (world-record w)
+                       (add1 counter)
+                       (world-obstacles w)
+                       (world-free-spaces w)
+                       #f)
+           
+           ;; muovi il serpente
+           (let* ([snake      (world-snake w)]
+                  [dir        (world-dir w)]
+                  [foods      (world-foods w)]
+                  [score      (world-score w)]
+                  [record     (world-record w)]
+                  [head       (vector-ref snake 0)]
+                  ;; Pac-Man wrap
+                  [new-head (if (eq? (menu-mode (world-menu w)) 'Pacman)
+              (wrap-head (move-head head dir)
+                         (menu-size (world-menu w)))
+              (move-head head dir))]
+
+                  [snake-list (vector->list snake)]
+                  [new-snake  (cons new-head snake-list)]
+                  ;; indice del frutto mangiato
+                  [ate-index (vector-index (lambda (f) (equal? new-head f)) foods)])
+             
+             ;; serpente ha mangiato un frutto
+             (if (not (eq? ate-index #f))
+    ;; serpente ha mangiato
+    (let* ([new-score  (+ score 1)]
+           [new-record (max record new-score)]
+           [new-food   (vector-ref (random-foods (list->vector new-snake)
+                                                 (world-obstacles w) 1) 0)]
+           [new-foods  (replace-food-at-index foods ate-index new-food)]
+           [win?       (= new-score (world-free-spaces w))])
+      (if win?
           (make-world 'game
                       (world-menu w)
-                      (world-snake w)
-                      (world-dir w)
-                      (world-foods w)
-                      #f
-                      (world-score w)
-                      (world-record w)
-                      (add1 counter)
+                      (list->vector new-snake)
+                      dir
+                      new-foods
+                      'win
+                      new-score
+                      new-record
+                      0
                       (world-obstacles w)
                       (world-free-spaces w)
-                      #f)]
-         
-         ;; muovi il serpente
-         [else
-          (let* ([snake      (world-snake w)]
-                 [dir        (world-dir w)]
-                 [foods      (world-foods w)]
-                 [score      (world-score w)]
-                 [record     (world-record w)]
-                 [head       (vector-ref snake 0)]
-                 [new-head   (move-head head dir)]
-                 [snake-list (vector->list snake)]
-                 [new-snake  (cons new-head snake-list)]
-                 ;; trova indice del frutto mangiato, se presente
-                 [ate-index
-                  (let loop ([i 0])
-                    (cond
-                      [(>= i (vector-length foods)) #f]
-                      [(equal? new-head (vector-ref foods i)) i]
-                      [else (loop (add1 i))]))])
-            
-            (cond
-  ;; serpente ha mangiato un frutto
-  [(not (eq? ate-index #f))
- (let* ([new-score  (+ score 1)]
-        [new-record (max record new-score)]
-        ;; generate only one new fruit for the eaten index
-        [new-food   (vector-ref (random-foods (list->vector new-snake)
-                                              (world-obstacles w) 1) 0)]
-        ;; replace only the eaten fruit in the vector
-        [new-foods  (replace-food-at-index foods ate-index new-food)]
-        [win?       (= new-score (world-free-spaces w))])
-   (if win?
-       (make-world 'game
-                   (world-menu w)
-                   (list->vector new-snake)
-                   dir
-                   new-foods
-                   'win
-                   new-score
-                   new-record
-                   0
-                   (world-obstacles w)
-                   (world-free-spaces w)
-                   #f)
-       (make-world 'game
-                   (world-menu w)
-                   (list->vector new-snake)
-                   dir
-                   new-foods
-                   #f
-                   new-score
-                   new-record
-                   0
-                   (world-obstacles w)
-                   (world-free-spaces w)
-                   #f)))]
-
-              
-              ;; serpente non mangia
-[else
- (let ([shrunk (reverse (rest (reverse new-snake)))])
-   (letrec ([collides-with-food?
-             (lambda (head foods idx)
-               (cond
-                 [(>= idx (vector-length foods)) #f]
-                 [(equal? head (vector-ref foods idx)) #t]
-                 [else (collides-with-food? head foods (add1 idx))]))])
-     (if (or (wall-collision? new-head)
-             (self-collision? new-head (list->vector shrunk))
-             (collides-with-food? new-head foods 0)
-             (obstacle-collision? new-head (world-obstacles w)))
-         (make-world 'game
-                     (world-menu w)
-                     snake
-                     dir
-                     foods
-                     #t
-                     score
-                     record
-                     0
-                     (world-obstacles w)
-                     (world-free-spaces w)
-                     #f)
-         (make-world 'game
-                     (world-menu w)
-                     (list->vector shrunk)
-                     dir
-                     foods
-                     #f
-                     score
-                     record
-                     0
-                     (world-obstacles w)
-                     (world-free-spaces w)
-                     #f))))]
-))]))]))
+                      #f)
+          (make-world 'game
+                      (world-menu w)
+                      (list->vector new-snake)
+                      dir
+                      new-foods
+                      #f
+                      new-score
+                      new-record
+                      0
+                      (world-obstacles w)
+                      (world-free-spaces w)
+                      #f)))
+    ;; serpente non mangia
+    (let ([shrunk (reverse (rest (reverse new-snake)))])
+      (if (or (and (not (eq? (menu-mode (world-menu w)) 'Pacman))
+                   (wall-collision? new-head))
+              (self-collision? new-head (list->vector shrunk))
+              (obstacle-collision? new-head (world-obstacles w))
+              (not (eq? (vector-index (lambda (f) (equal? f new-head)) foods) #f)))
+          ;; game over
+          (make-world 'game
+                      (world-menu w)
+                      snake
+                      dir
+                      foods
+                      #t
+                      score
+                      record
+                      0
+                      (world-obstacles w)
+                      (world-free-spaces w)
+                      #f)
+          ;; avanzamento normale
+          (make-world 'game
+                      (world-menu w)
+                      (list->vector shrunk)
+                      dir
+                      foods
+                      #f
+                      score
+                      record
+                      0
+                      (world-obstacles w)
+                      (world-free-spaces w)
+                      #f))))
+)))]))
 
 
 
