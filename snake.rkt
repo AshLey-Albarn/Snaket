@@ -353,14 +353,10 @@
          [scene-with-obstacles (draw-obstacles (world-obstacles w) (menu-size (world-menu w)) grid-scene)]
          [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles color)]
          [scene-with-food (draw-foods (world-foods w) scene-with-snake)]
-         [final-inner
-          (if (world-game-over? w)
-              (overlay (text "Game Over" 24 "red") scene-with-food)
-              scene-with-food)]
          [score-bar (create-score-bar (world-score w) (world-record w) (world-paused? w))]
          [outer (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black")]
          [scene-with-grid
-          (place-image final-inner
+          (place-image scene-with-food
                        (+ BORDER-SIZE (/ SCENE-WIDTH 2))
                        (+ TOP-BORDER-SIZE (/ SCENE-HEIGHT 2))
                        (overlay/align "center" "top" score-bar outer))])
