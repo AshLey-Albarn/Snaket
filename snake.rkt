@@ -4,9 +4,15 @@
 (require 2htdp/universe)
 (require 2htdp/image)
 
-;; ======================
-;; Menu speed variable
-;; ======================
+;; Menu structure
+;; A Menu represents the game settings
+;; Fields:
+;;   speed        : Number      ; delay between moves in seconds
+;;   mode         : Symbol      ; game mode: 'Plain, 'Obstacles, or 'Pacman
+;;   color        : Color       ; background or theme color
+;;   size         : Number      ; size of each cell in the grid
+;;   selector     : Symbol      ; currently selected menu option
+;;   num-fruits   : Number      ; number of food items on the board
 (define-struct menu (speed mode color size selector num-fruits))
 (define initial-menu (make-menu 0.10 'Plain 'Darkgreen 20 'speed 1))
 
@@ -14,17 +20,21 @@
 ;; Constants
 ;; ======================
 
+;; Speeds and labels
 (define SPEEDS-LIST (list 0.15 0.10 0.07 0.03))
 (define SPEED-LABELS '("Slow" "Normal" "Fast" "Crazy"))
+
+;; Game mode options
 (define MODE-OPTIONS '(Plain Obstacles Pacman))
+
+;; Cell size options
 (define SIZE-OPTIONS (list 16 20 24))
 
-
-;size, cells and grid
+;; Grid and screen dimensions
 (define CELL-NUM-WIDTH 24)
 (define CELL-NUM-HEIGHT 24)
 (define CELL-SIZE 20)
-(define BORDER-SIZE 10)             
+(define BORDER-SIZE 10)
 (define TOP-BORDER-SIZE (* 3 BORDER-SIZE))
 
 (define SCENE-WIDTH 480)
@@ -32,48 +42,80 @@
 (define TOTAL-WIDTH (+ SCENE-WIDTH (* 2 BORDER-SIZE)))
 (define TOTAL-HEIGHT (+ SCENE-HEIGHT TOP-BORDER-SIZE BORDER-SIZE))
 
-;Button
+;; Button dimensions
 (define BUTTON-WIDTH 100)
 (define BUTTON-HEIGHT 30)
 
-;Graphics
+;; Colors
 (define COLOR-OPTIONS '(Darkgreen Red Blue Magenta Yellow))
-
-
 (define GRID-COLOR "gray")
 (define TRANSPARENT (make-color 0 0 0 0))
 
-(define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 (circle 10 "solid" "white")))
+;; Eye for snake head
+(define EYE (overlay/xy (circle 4 "solid" "black") -6 -2 
+                        (circle 10 "solid" "white")))
 
-
+;; Make snake head image
+;; (make-snake-head Color) -> Image
+;; returns an image representing the snake's head
 (define (make-snake-head color)
-  (scale 0.5 (overlay/xy EYE -20 -25 (overlay/xy EYE 0 -25 (rotate 90 (polygon (list (make-pulled-point 1/2 20 0 0 1/2 -20)
-                 (make-posn -10 20)
-                 (make-pulled-point 1/2 -20 60 0 1/2 20)
-                 (make-posn -10 -20))
-           "solid"
-           color))))))
+  (scale 0.5
+         (overlay/xy EYE -20 -25
+                     (overlay/xy EYE 0 -25
+                                 (rotate 90
+                                         (polygon (list
+                                                   (make-pulled-point 1/2 20 0 0 1/2 -20)
+                                                   (make-posn -10 20)
+                                                   (make-pulled-point 1/2 -20 60 0 1/2 20)
+                                                   (make-posn -10 -20))
+                                                  "solid"
+                                                  color))))))
 
+;; Make snake body image
+;; (make-snake-body Color) -> Image
+;; returns a rectangle representing a snake body segment
 (define (make-snake-body color)
   (rectangle 13 20 "solid" color))
 
+;; Make angled snake body
+;; (make-snake-body-angle Color) -> Image
+;; returns a more complex body segment for turning segments
 (define (make-snake-body-angle color)
   (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 7 -7
               (overlay/xy (rectangle 13 13 "solid" TRANSPARENT) 0 -14
                           (overlay/xy (rectangle 13 13 "solid" color) -7 -7
-                                      (overlay/xy (rectangle 13 13 "solid" color) 0 7 (rectangle 13 13 "solid" color))))))
+                                      (overlay/xy (rectangle 13 13 "solid" color) 0 7
+                                                  (rectangle 13 13 "solid" color))))))
 
+;; Fruit graphics
 (define FRUIT-CORE (circle 10 "solid" "red"))
 (define FRUIT-LEAF (ellipse 5 10 "solid" "green"))
-(define FRUIT 
-    (overlay/xy (rotate 45 FRUIT-LEAF) -4 3 FRUIT-CORE))
+(define FRUIT (overlay/xy (rotate 45 FRUIT-LEAF) -4 3 FRUIT-CORE))
 
+;; Obstacle graphics
 (define OBSTACLE (rectangle CELL-SIZE CELL-SIZE "solid" "black"))
+
   
-;; ======================
-;; Data Structures
-;; ======================
+;; World structure
+;; A World represents the full game state
+;; Fields:
+;;   mode          : Symbol        ; either 'menu or 'game
+;;   menu          : Menu          ; current menu settings
+;;   snake         : Vector<Posn>  ; positions of snake segments
+;;   dir           : Symbol        ; direction of snake: 'up, 'down, 'left, 'right, 'none
+;;   foods         : Vector<Posn>  ; positions of food items
+;;   game-over?    : Boolean|Symbol ; #t for loss, 'win for win, #f otherwise
+;;   score         : Number        ; current game score
+;;   record        : Number        ; highest score
+;;   tick-counter  : Number        ; counter for movement speed
+;;   obstacles     : Vector<Posn>  ; positions of obstacles
+;;   free-spaces   : Number        ; number of free cells on the board
+;;   paused?       : Boolean       ; whether game is paused
+
 (define-struct world (mode menu snake dir foods game-over? score record tick-counter obstacles free-spaces paused?))
+;; Example instance:
+(define example-world
+  (make-world 'menu initial-menu (vector (make-posn 7 12)) 'none (vector (make-posn 15 12)) #f 0 0 0 (vector) 0 #f))
 
 ;; ======================
 ;; Initial Game Data
@@ -87,8 +129,12 @@
 ;; ======================
 ;; Helper Functions
 ;; ======================
-
-;movement for the head of the snake
+;; move-head: Posn Symbol -> Posn
+;; Given the head position and direction, returns the new head position
+(check-expect (move-head (make-posn 5 5) 'up) (make-posn 5 4))
+(check-expect (move-head (make-posn 5 5) 'down) (make-posn 5 6))
+(check-expect (move-head (make-posn 5 5) 'left) (make-posn 4 5))
+(check-expect (move-head (make-posn 5 5) 'right) (make-posn 6 5))
 (define (move-head head dir)
   (let ([x (posn-x head)] [y (posn-y head)])
     (cond [(symbol=? dir 'up) (make-posn x (- y 1))]
@@ -96,11 +142,18 @@
           [(symbol=? dir 'left) (make-posn (- x 1) y)]
           [(symbol=? dir 'right) (make-posn (+ x 1) y)])))
 
-;checks collisions
+;; wall-collision?: Posn -> Boolean
+;; Checks if a given position collides with the wall boundaries
+(check-expect (wall-collision? (make-posn 0 5)) #t)
+(check-expect (wall-collision? (make-posn 5 0)) #t)
+(check-expect (wall-collision? (make-posn 5 5)) #f)
 (define (wall-collision? p)
   (or (< (posn-x p) 1) (>= (posn-x p) (+ CELL-NUM-WIDTH 1))
       (< (posn-y p) 1) (>= (posn-y p) (+ CELL-NUM-HEIGHT 1))))
 
+;; self-collision?: Posn Vector<Posn> -> Boolean
+;; Checks if the head collides with any part of the snake body (excluding head)
+;; Termination argument: the loop increments i each step and stops at vector-length of snake
 (define (self-collision? head snake)
   (let loop ([i 1])
     (if (>= i (vector-length snake))
@@ -108,7 +161,15 @@
         (or (equal? head (vector-ref snake i))
             (loop (add1 i))))))
 
-;creates food in random places
+;; Examples
+(check-expect (self-collision? (make-posn 2 2) (vector (make-posn 2 2) (make-posn 3 2))) #f)
+(check-expect (self-collision? (make-posn 3 2) (vector (make-posn 2 2) (make-posn 3 2))) #t)
+
+
+;; random-foods : Vector<Posn> Vector<Posn> Number -> Vector<Posn>
+;; Purpose: Creates `n` food positions randomly on the grid, avoiding the snake and obstacles.
+;;          Returns a vector of positions.
+;; Termination argument: The recursive loop decreases `count` each time a new food is added or stops if no free space remains.
 (define (random-foods snake obstacles n)
   (let loop ([count n] [acc '()])
     (if (= count 0)
@@ -122,35 +183,39 @@
                                         (loop2 (add1 i)))))
                               (member p acc))])
           (if occupied?
-              ;; check if there’s still any free space
               (if (>= (count-free-spaces obstacles) (vector-length snake))
-                  (loop count acc)   ; try again
-                  (list->vector acc)) ; no free space, return what we have
+                  (loop count acc)
+                  (list->vector acc))
               (loop (sub1 count) (cons p acc)))))))
 
+;; Example usage
+(define test-snake (vector (make-posn 5 5) (make-posn 6 5)))
+(define test-obstacles (list (make-posn 1 1) (make-posn 2 2)))
+(check-expect (vector-length (random-foods test-snake test-obstacles 3)) 3)
 
-;creates free spaces
+
+
+;; count-free-spaces : List<Posn> -> Number
+;; Purpose: Computes the number of free cells on the grid given obstacle positions.
 (define (count-free-spaces obstacles)
   (- (* CELL-NUM-WIDTH CELL-NUM-HEIGHT)
      (length obstacles)
-     1))
+     1)) ; subtract 1 for snake head or reserved space
+
+;; Examples
+(check-expect (count-free-spaces '()) (- (* CELL-NUM-WIDTH CELL-NUM-HEIGHT) 1))
+(check-expect (count-free-spaces (list (make-posn 1 1) (make-posn 2 2))) 
+              (- (* CELL-NUM-WIDTH CELL-NUM-HEIGHT) 2 1))
 
 
-;; ============================================
-;; ADDED HELPERS FOR TURN DETECTION
-;; ============================================
-
-;returns either 'up 'down 'left 'right based on the x's and y's
+;; direction : Posn Posn -> Symbol
+;; Purpose: Determines the direction from `from` to `to`, taking grid wrap-around into account.
 (define (direction from to)
   (let* ([dx (- (posn-x to) (posn-x from))]
          [dy (- (posn-y to) (posn-y from))]
-
-         ;; handle wrap-around horizontally
          [dx-wrap (cond [(> dx (/ CELL-NUM-WIDTH 2)) (- dx CELL-NUM-WIDTH)]
                         [(< dx (- (/ CELL-NUM-WIDTH 2))) (+ dx CELL-NUM-WIDTH)]
                         [else dx])]
-
-         ;; handle wrap-around vertically
          [dy-wrap (cond [(> dy (/ CELL-NUM-HEIGHT 2)) (- dy CELL-NUM-HEIGHT)]
                         [(< dy (- (/ CELL-NUM-HEIGHT 2))) (+ dy CELL-NUM-HEIGHT)]
                         [else dy])])
@@ -158,37 +223,56 @@
           [(= dy-wrap 0) (if (< dx-wrap 0) 'left 'right)]
           [else 'none])))
 
+;; Examples
+(check-expect (direction (make-posn 5 5) (make-posn 5 4)) 'up)
+(check-expect (direction (make-posn 5 5) (make-posn 5 6)) 'down)
+(check-expect (direction (make-posn 5 5) (make-posn 4 5)) 'left)
+(check-expect (direction (make-posn 5 5) (make-posn 6 5)) 'right)
+(check-expect (direction (make-posn 0 0) (make-posn 23 0)) 'left) ; wrap-around
 
+;; vertical? : Symbol -> Boolean
+;; Purpose: Checks if a direction is vertical
 (define (vertical? dir)
   (or (eq? dir 'up) (eq? dir 'down)))
+
+(check-expect (vertical? 'up) #t)
+(check-expect (vertical? 'down) #t)
+(check-expect (vertical? 'left) #f)
+
+;; horizontal? : Symbol -> Boolean
+;; Purpose: Checks if a direction is horizontal
 (define (horizontal? dir)
   (or (eq? dir 'left) (eq? dir 'right)))
 
-;returns the correct tail piece to draw based on the postion of also the previous and next piece,
-;only case that doesent apply is if the snake has only one piece (cant get a next piece)
+(check-expect (horizontal? 'left) #t)
+(check-expect (horizontal? 'right) #t)
+(check-expect (horizontal? 'up) #f)
+
+;; get-body-image : Symbol Color -> Image
+;; Returns the correct image for a snake body segment based on direction
 (define (get-body-image dir color)
   (cond [(vertical? dir) (make-snake-body color)]
         [(horizontal? dir) (rotate 90 (make-snake-body color))]))
 
+;; draw-tail-piece : Posn Posn Posn Color -> Image
+;; Purpose: Returns the correct image for a tail piece based on previous, current, and next positions
 (define (draw-tail-piece prev curr next color)
   (let* ([dir1 (direction prev curr)]
          [dir2 (direction curr next)])
     (cond
       [(eq? dir1 dir2) (get-body-image dir1 color)]
       [(or (and (eq? dir1 'up) (eq? dir2 'right))
-           (and (eq? dir1 'left) (eq? dir2 'down)))
-       (rotate 270 (make-snake-body-angle color))]
+           (and (eq? dir1 'left) (eq? dir2 'down))) (rotate 270 (make-snake-body-angle color))]
       [(or (and (eq? dir1 'right) (eq? dir2 'up))
-           (and (eq? dir1 'down) (eq? dir2 'left)))
-       (rotate 90 (make-snake-body-angle color))]
+           (and (eq? dir1 'down) (eq? dir2 'left))) (rotate 90 (make-snake-body-angle color))]
       [(or (and (eq? dir1 'right) (eq? dir2 'down))
-           (and (eq? dir1 'up) (eq? dir2 'left)))
-       (rotate 180 (make-snake-body-angle color))]
+           (and (eq? dir1 'up) (eq? dir2 'left))) (rotate 180 (make-snake-body-angle color))]
       [(or (and (eq? dir1 'down) (eq? dir2 'right))
-           (and (eq? dir1 'left) (eq? dir2 'up)))
-       (rotate 0 (make-snake-body-angle color))]
+           (and (eq? dir1 'left) (eq? dir2 'up))) (rotate 0 (make-snake-body-angle color))]
       [else (make-snake-body color)])))
 
+;; get-head-image : Symbol Color -> Image
+;; Purpose: Returns the correct image for the snake head depending on direction
 (define (get-head-image dir color)
   (cond [(symbol=? dir 'right) (rotate 270 (make-snake-head color))]
         [(symbol=? dir 'down) (rotate 180 (make-snake-head color))]
@@ -199,6 +283,8 @@
 ;; ======================
 ;; Grid Drawing
 ;; ======================
+;; draw-vlines : Number Number Image -> Image
+;; Purpose: Draws vertical grid lines recursively
 (define (draw-vlines i max scene)
   (if (> i max)
       scene
@@ -209,6 +295,8 @@
                  (* i CELL-SIZE) SCENE-HEIGHT
                  GRID-COLOR))))
 
+;; draw-hlines : Number Number Image -> Image
+;; Purpose: Draws horizontal grid lines recursively
 (define (draw-hlines i max scene)
   (if (> i max)
       scene
@@ -219,10 +307,13 @@
                  SCENE-WIDTH (* i CELL-SIZE)
                  GRID-COLOR))))
 
+;; draw-grid : Image -> Image
+;; Purpose: Draws the full grid over the given image
 (define (draw-grid scene)
   (let* ([vertical (draw-vlines 0 CELL-NUM-WIDTH scene)]
          [horizontal (draw-hlines 0 CELL-NUM-HEIGHT vertical)])
     horizontal))
+
 
 ;; ======================
 ;; Rendering Snake Game
@@ -1172,7 +1263,7 @@
 
 
 
-;; ====================== ;; Initial World ;; ======================
+;; Initial World
 
 (define initial-world
   (make-world 'menu
@@ -1186,7 +1277,7 @@
               0
               '()
               (count-free-spaces '())
-              #f)) ; free-spaces for menu, no obstacles
+              #f))
 
 
 ;; ====================== ;; Run Big-Bang ;; ======================
