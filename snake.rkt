@@ -15,9 +15,6 @@
 ;; Constants
 ;; ======================
 
-(define MAX-SPEED 0.30)
-(define MIN-SPEED 0.01)
-
 (define SPEEDS-LIST (list 0.15 0.10 0.07 0.03))
 (define SPEED-LABELS '("Slow" "Normal" "Fast" "Crazy"))
 (define MODE-OPTIONS '(Plain Obstacles Pacman))
@@ -703,14 +700,6 @@
              [(> y max-y) min-y]
              [else y])))))
 
-
-
-
-
-
-
-
-
 ;; ======================
 ;; Helper: Valid position (inside grid, not on snake, food, or obstacle)
 ;; ======================
@@ -795,7 +784,7 @@
                       (loop 1 (+ y 1)))))))))
 
 ;; ======================
-;; all-reachable? (senza define annidate)
+;; all-reachable? 
 ;; ======================
 (define (all-reachable? snake food obstacles)
   (let ((width CELL-NUM-WIDTH)
