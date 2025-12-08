@@ -419,167 +419,92 @@
 ;; Key Handlers
 ;; ======================
 
+(define (next-in-list lst x)
+  (cond
+    [(empty? lst) x] ; caso impossibile ma sicuro
+    [(equal? (first lst) x)
+     (if (empty? (rest lst))
+         (first lst)
+         (first (rest lst)))]
+    [else
+     (next-in-list (rest lst) x)]))
+
+(define (prev-in-list lst x)
+  (letrec ((helper
+            (lambda (prev remaining full)
+              (cond
+                [(empty? remaining) #f] ; x not found
+                [(equal? (first remaining) x)
+                 ;; if prev exists, return it; else return last element of full
+                 (if (not (eq? prev #f))
+                     prev
+                     (let loop ((l full))
+                       (if (empty? (rest l))
+                           (first l)
+                           (loop (rest l)))))]
+                [else
+                 (helper (first remaining) (rest remaining) full)]))))
+    (helper #f lst lst)))
+
+
+
+
+
 (define (speed-label speed)
-  (let ([idx (index-of SPEEDS-LIST speed)])
-    (if (eq? idx #f)
-        "Normal"
-        (list-ref SPEED-LABELS idx))))
+  (letrec ((helper (lambda (slist llist)
+                     (cond
+                       [(empty? slist) "Normal"]
+                       [(equal? (first slist) speed) (first llist)]
+                       [else (helper (rest slist) (rest llist))]))))
+    (helper SPEEDS-LIST SPEED-LABELS)))
 
 
 (define (menu-key m key)
-  (let ([selectors '(speed mode size color num-fruits)])
+  (let ([selectors '(speed mode size color num-fruits)]
+        [sel (menu-selector m)])
+    
     (cond
-      ;; W/S per cambiare selezione
-      [(or (key=? key "w") (key=? key "W"))
-       (let* ([current (menu-selector m)]
-              [idx (index-of selectors current)]
-              [new-idx (if (= idx 0)
-                           (- (length selectors) 1)
-                           (sub1 idx))])
-         (make-menu (menu-speed m)
-                    (menu-mode m)
-                    (menu-color m)
-                    (menu-size m)
-                    (list-ref selectors new-idx)
-                    (menu-num-fruits m)))]
+      ;; Movimento tra voci (W = up)
+      [(member key '("w" "W"))
+       (make-menu (menu-speed m)
+                  (menu-mode m)
+                  (menu-color m)
+                  (menu-size m)
+                  (prev-in-list selectors sel)
+                  (menu-num-fruits m))]
+
+      ;; Movimento tra voci (S = down)
+      [(member key '("s" "S"))
+       (make-menu (menu-speed m)
+                  (menu-mode m)
+                  (menu-color m)
+                  (menu-size m)
+                  (next-in-list selectors sel)
+                  (menu-num-fruits m))]
+
       
-      [(or (key=? key "s") (key=? key "S"))
-       (let* ([current (menu-selector m)]
-              [idx (index-of selectors current)]
-              [new-idx (if (= idx (- (length selectors) 1))
-                           0
-                           (add1 idx))])
-         (make-menu (menu-speed m)
-                    (menu-mode m)
-                    (menu-color m)
-                    (menu-size m)
-                    (list-ref selectors new-idx)
-                    (menu-num-fruits m)))]
-      
-      ;; A per diminuire il valore dell'opzione selezionata
-      [(or (key=? key "a") (key=? key "A"))
-       (cond
-         [(eq? (menu-selector m) 'speed)
-          (let* ([idx (index-of SPEEDS-LIST (menu-speed m))]
-                 [new-idx (if (= idx 0)
-                              (- (length SPEEDS-LIST) 1)
-                              (sub1 idx))])
-            (make-menu (list-ref SPEEDS-LIST new-idx)
-                       (menu-mode m)
-                       (menu-color m)
-                       (menu-size m)
-                       'speed
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'mode)
-          (let* ([idx (index-of MODE-OPTIONS (menu-mode m))]
-                 [new-idx (if (= idx 0)
-                              (- (length MODE-OPTIONS) 1)
-                              (sub1 idx))])
-            (make-menu (menu-speed m)
-                       (list-ref MODE-OPTIONS new-idx)
-                       (menu-color m)
-                       (menu-size m)
-                       'mode
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'size)
-          (let* ([idx (index-of SIZE-OPTIONS (menu-size m))]
-                 [new-idx (if (= idx 0)
-                              (- (length SIZE-OPTIONS) 1)
-                              (sub1 idx))])
-            (make-menu (menu-speed m)
-                       (menu-mode m)
-                       (menu-color m)
-                       (list-ref SIZE-OPTIONS new-idx)
-                       'size
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'color)
-          (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
-                 [new-idx (if (= idx 0)
-                              (- (length COLOR-OPTIONS) 1)
-                              (sub1 idx))])
-            (make-menu (menu-speed m)
-                       (menu-mode m)
-                       (list-ref COLOR-OPTIONS new-idx)
-                       (menu-size m)
-                       'color
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'num-fruits)
-          (let* ([n (menu-num-fruits m)]
-                [new-n (if (= n 1) 5 (sub1 n))]) ; cicla 1-5
-            (make-menu (menu-speed m)
-                       (menu-mode m)
-                       (menu-color m)
-                       (menu-size m)
-                       'num-fruits
-                       new-n))])]
-      
-      ;; D per aumentare il valore dell'opzione selezionata
-      [(or (key=? key "d") (key=? key "D"))
-       (cond
-         [(eq? (menu-selector m) 'speed)
-          (let* ([idx (index-of SPEEDS-LIST (menu-speed m))]
-                 [new-idx (if (= idx (- (length SPEEDS-LIST) 1))
-                              0
-                              (add1 idx))])
-            (make-menu (list-ref SPEEDS-LIST new-idx)
-                       (menu-mode m)
-                       (menu-color m)
-                       (menu-size m)
-                       'speed
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'mode)
-          (let* ([idx (index-of MODE-OPTIONS (menu-mode m))]
-                 [new-idx (if (= idx (- (length MODE-OPTIONS) 1))
-                              0
-                              (add1 idx))])
-            (make-menu (menu-speed m)
-                       (list-ref MODE-OPTIONS new-idx)
-                       (menu-color m)
-                       (menu-size m)
-                       'mode
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'size)
-          (let* ([idx (index-of SIZE-OPTIONS (menu-size m))]
-                 [new-idx (if (= idx (- (length SIZE-OPTIONS) 1))
-                              0
-                              (add1 idx))])
-            (make-menu (menu-speed m)
-                       (menu-mode m)
-                       (menu-color m)
-                       (list-ref SIZE-OPTIONS new-idx)
-                       'size
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'color)
-          (let* ([idx (index-of COLOR-OPTIONS (menu-color m))]
-                 [new-idx (if (= idx (- (length COLOR-OPTIONS) 1))
-                              0
-                              (add1 idx))])
-            (make-menu (menu-speed m)
-                       (menu-mode m)
-                       (list-ref COLOR-OPTIONS new-idx)
-                       (menu-size m)
-                       'color
-                       (menu-num-fruits m)))]
-         
-         [(eq? (menu-selector m) 'num-fruits)
-          (let* ([n (menu-num-fruits m)]
-                [new-n (if (= n 5) 1 (add1 n))]) ; cicla 1-5
-            (make-menu (menu-speed m)
-                       (menu-mode m)
-                       (menu-color m)
-                       (menu-size m)
-                       'num-fruits
-                       new-n))])]
-      
-      ;; nessun cambiamento
-      [else m])))
+  ;; Decrement (A)
+  [(or (string=? key "a") (string=? key "A"))
+   (cond
+     [(eq? sel 'speed)      (make-menu (prev-in-list SPEEDS-LIST (menu-speed m)) (menu-mode m) (menu-color m) (menu-size m) 'speed (menu-num-fruits m))]
+     [(eq? sel 'mode)       (make-menu (menu-speed m) (prev-in-list MODE-OPTIONS (menu-mode m)) (menu-color m) (menu-size m) 'mode (menu-num-fruits m))]
+     [(eq? sel 'size)       (make-menu (menu-speed m) (menu-mode m) (menu-color m) (prev-in-list SIZE-OPTIONS (menu-size m)) 'size (menu-num-fruits m))]
+     [(eq? sel 'color)      (make-menu (menu-speed m) (menu-mode m) (prev-in-list COLOR-OPTIONS (menu-color m)) (menu-size m) 'color (menu-num-fruits m))]
+     [(eq? sel 'num-fruits) (make-menu (menu-speed m) (menu-mode m) (menu-color m) (menu-size m) 'num-fruits (if (= (menu-num-fruits m) 1) 5 (sub1 (menu-num-fruits m))))])]
+  
+  ;; Increment (D)
+  [(or (string=? key "d") (string=? key "D"))
+   (cond
+     [(eq? sel 'speed)      (make-menu (next-in-list SPEEDS-LIST (menu-speed m)) (menu-mode m) (menu-color m) (menu-size m) 'speed (menu-num-fruits m))]
+     [(eq? sel 'mode)       (make-menu (menu-speed m) (next-in-list MODE-OPTIONS (menu-mode m)) (menu-color m) (menu-size m) 'mode (menu-num-fruits m))]
+     [(eq? sel 'size)       (make-menu (menu-speed m) (menu-mode m) (menu-color m) (next-in-list SIZE-OPTIONS (menu-size m)) 'size (menu-num-fruits m))]
+     [(eq? sel 'color)      (make-menu (menu-speed m) (menu-mode m) (next-in-list COLOR-OPTIONS (menu-color m)) (menu-size m) 'color (menu-num-fruits m))]
+     [(eq? sel 'num-fruits) (make-menu (menu-speed m) (menu-mode m) (menu-color m) (menu-size m) 'num-fruits (if (= (menu-num-fruits m) 5) 1 (add1 (menu-num-fruits m))))])]
+  
+  ;; default
+  [else m])
+))
+
 
 
 
@@ -685,13 +610,30 @@
  ; min-x, max-x, min-y, max-y
 
 (define (wrap-head head size)
-  (let ([bounds (active-grid-bounds size)])
-    (let ([min-x (list-ref bounds 0)]
-          [max-x (list-ref bounds 1)]
-          [min-y (list-ref bounds 2)]
-          [max-y (list-ref bounds 3)]
-          [x (posn-x head)]
-          [y (posn-y head)])
+  (local 
+    ;; recursive extraction of four bounds from a list
+    ((define (extract-bounds lst)
+       (cond
+         [(empty? lst) (error "Bounds list too short")]
+         [else
+          (let ([min-x (first lst)]
+                [rest1 (rest lst)])
+            (if (empty? rest1) (error "Bounds list too short")
+                (let ([max-x (first rest1)]
+                      [rest2 (rest rest1)])
+                  (if (empty? rest2) (error "Bounds list too short")
+                      (let ([min-y (first rest2)]
+                            [rest3 (rest rest2)])
+                        (if (empty? rest3) (error "Bounds list too short")
+                            (let ([max-y (first rest3)])
+                              (list min-x max-x min-y max-y))))))))])))
+    (let* ([bounds (extract-bounds (active-grid-bounds size))]
+           [min-x (first bounds)]
+           [max-x (second bounds)]
+           [min-y (third bounds)]
+           [max-y (fourth bounds)]
+           [x (posn-x head)]
+           [y (posn-y head)])
       (make-posn
        (cond [(< x min-x) max-x]
              [(> x max-x) min-x]
@@ -699,6 +641,7 @@
        (cond [(< y min-y) max-y]
              [(> y max-y) min-y]
              [else y])))))
+
 
 ;; ======================
 ;; Helper: Valid position (inside grid, not on snake, food, or obstacle)
