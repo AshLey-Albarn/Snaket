@@ -3,7 +3,6 @@
 #reader(lib "htdp-advanced-reader.ss" "lang")((modname snake) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #t #t none #f () #f)))
 (require 2htdp/universe)
 (require 2htdp/image)
-(require racket/list)
 
 ;; ======================
 ;; Menu speed variable
