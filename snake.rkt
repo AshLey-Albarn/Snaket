@@ -315,6 +315,7 @@
     horizontal))
 
 
+
 ;; ======================
 ;; Rendering Snake Game
 ;; ======================
@@ -325,6 +326,10 @@
 (define (cell-center n)
   (+ (* (sub1 n) CELL-SIZE)
      (/ CELL-SIZE 2)))
+(check-expect (cell-center 1) 10)
+(check-expect (cell-center 3) 50)
+(check-expect (cell-center 10) 190)
+
 
 ;; draw-obstacles : List<Posn> Number Image -> Image
 ;; Purpose: Draws all obstacles onto the scene. Obstacles that lie outside the central game area (defined by menu-size)
@@ -548,6 +553,13 @@
          (first (rest lst)))]
     [else
      (next-in-list (rest lst) x)]))
+(check-expect (next-in-list '() 5) 5)
+(check-expect (next-in-list '(1 2 3) 2) 3)
+(check-expect (next-in-list '(1 2 3) 3) 3)
+(check-expect (next-in-list '(4 5 6) 7) 7)
+(check-expect (next-in-list '(1 2 2 3) 2) 2)
+
+
 
 (define (prev-in-list lst x)
   (letrec ((helper
@@ -564,8 +576,11 @@
                 [else
                  (helper (first remaining) (rest remaining) full)]))))
     (helper #f lst lst)))
-
-
+(check-expect (prev-in-list '() 5) #f)
+(check-expect (prev-in-list '(1 2 3) 2) 1)
+(check-expect (prev-in-list '(1 2 3) 1) 3)
+(check-expect (prev-in-list '(4 5 6) 7) #f)
+(check-expect (prev-in-list '(1 2 2 3) 2) 1)
 
 
 ;; speed-label : Number -> String
@@ -581,6 +596,13 @@
     (helper SPEEDS-LIST SPEED-LABELS)))
 
 
+;; menu-key : Menu String -> Menu
+;; Purpose: Handles keyboard input specifically when the game is in the main configuration menu. It allows the user to navigate between and modify the game settings.
+;;          - Keys "W" or "w": Moves the selector (highlight) up to the previous option in the menu (e.g., from 'mode to 'speed).
+;;          - Keys "S" or "s": Moves the selector down to the next option in the menu (e.g., from 'speed to 'mode).
+;;          - Keys "A" or "a": Decrements or cycles backward through the options for the currently selected setting (e.g., decreases speed, changes mode to previous option).
+;;          - Keys "D" or "d": Increments or cycles forward through the options for the currently selected setting (e.g., increases speed, changes mode to next option).
+;;          - Other Keys: Returns the menu state unchanged.
 (define (menu-key m key)
   (let ([selectors '(speed mode size color num-fruits)]
         [sel (menu-selector m)])
@@ -724,6 +746,10 @@
          [min-cell (+ offset 1)]
          [max-cell (- CELL-NUM-WIDTH offset)])
     (list min-cell max-cell min-cell max-cell)))
+(check-expect (active-grid-bounds 24) (list 1 24 1 24))
+(check-expect (active-grid-bounds 1)  (list 12 13 12 13))
+(check-expect (active-grid-bounds 10) (list 8 17 8 17))
+
 
 
 ;; wrap-head : Posn Number -> Posn
@@ -761,6 +787,13 @@
        (cond [(< y min-y) max-y]
              [(> y max-y) min-y]
              [else y])))))
+(check-expect (wrap-head (make-posn 1 1) 24) (make-posn 1 1))
+(check-expect (wrap-head (make-posn 0 0) 24) (make-posn 24 24))
+(check-expect (wrap-head (make-posn 25 25) 24) (make-posn 1 1))
+(check-expect (wrap-head (make-posn 12 5) 10) (make-posn 12 17))
+(check-expect (wrap-head (make-posn 7 17) 10) (make-posn 17 17))
+
+
 
 ;; valid-position? : Posn Vector<Posn> Posn List<Posn> -> Boolean
 ;; Purpose: Checks if a given position `p` is a valid and unoccupied cell within the game grid boundaries. 
@@ -778,6 +811,13 @@
              (if (equal? p (vector-ref snake i))
                  #f
                  (loop (add1 i)))))))
+(check-expect (valid-position? (make-posn 5 5) (vector) (make-posn 10 10) '()) #t)
+(check-expect (valid-position? (make-posn 0 5) (vector) (make-posn 10 10) '()) #f)
+(check-expect (valid-position? (make-posn 25 5) (vector) (make-posn 10 10) '()) #f)
+(check-expect (valid-position? (make-posn 5 5) (vector (make-posn 5 5)) (make-posn 10 10) '()) #f)
+(check-expect (valid-position? (make-posn 5 5) (vector) (make-posn 5 5) '()) #f)
+(check-expect (valid-position? (make-posn 5 5) (vector) (make-posn 10 10) (list (make-posn 5 5))) #f)
+
 
 ;; free-neighbors : Posn Vector<Posn> List<Posn> -> Number
 ;; Purpose: Calculates the number of adjacent (north, south, east, west) cells around a given position `p` that are currently free. 
@@ -793,10 +833,15 @@
              (if (and (>= (posn-x n) 1) (<= (posn-x n) CELL-NUM-WIDTH)
                       (>= (posn-y n) 1) (<= (posn-y n) CELL-NUM-HEIGHT)
                       (not (member n obstacles))
-                      (not (equal? n (vector-ref snake 0)))) ; la testa non conta
+                      (not (equal? n (vector-ref snake 0))))
                  (+ acc 1)
                  acc))
            0 neighbors)))
+(check-expect (free-neighbors (make-posn 5 5) (vector (make-posn 0 0)) '()) 4)
+(check-expect (free-neighbors (make-posn 1 1) (vector (make-posn 0 0)) '()) 2)
+(check-expect (free-neighbors (make-posn 24 24) (vector (make-posn 0 0)) '()) 2)
+(check-expect (free-neighbors (make-posn 5 5) (vector (make-posn 6 5)) '()) 3)
+(check-expect (free-neighbors (make-posn 5 5) (vector (make-posn 0 0)) (list (make-posn 5 6) (make-posn 4 5))) 2)
 
 
 ;; safe-to-place? : Posn List<Posn> Vector<Posn> Posn -> Boolean
@@ -832,6 +877,11 @@
                              (>= (- (free-neighbors n snake (cons p obstacles)) 1) 2))))
                   #t
                   neighbors)))))
+(check-expect (safe-to-place? (make-posn 5 5) '() (vector (make-posn 1 1)) (make-posn 1 1)) #t)
+(check-expect (safe-to-place? (make-posn 0 0) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
+(check-expect (safe-to-place? (make-posn 25 25) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
+(check-expect (safe-to-place? (make-posn 2 1) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
+(check-expect (safe-to-place? (make-posn 5 5) (list (make-posn 5 6)) (vector (make-posn 1 1)) (make-posn 1 1)) #t)
 
 
 ;; check-obstacle-conditions : List<Posn> Vector<Posn> Posn -> Boolean
@@ -853,6 +903,12 @@
                   (if (< x CELL-NUM-WIDTH)
                       (loop (+ x 1) y)
                       (loop 1 (+ y 1)))))))))
+(check-expect (check-obstacle-conditions '() (vector (make-posn 0 0)) (make-posn 5 5)) #t)
+(check-expect (check-obstacle-conditions (list (make-posn 1 1)) (vector (make-posn 0 0)) (make-posn 5 5)) #t)
+(check-expect (check-obstacle-conditions (list (make-posn 1 1) (make-posn 1 2) (make-posn 2 1) (make-posn 2 2)) (vector (make-posn 0 0)) (make-posn 5 5)) #t)
+(check-expect (check-obstacle-conditions '() (vector (make-posn 1 1) (make-posn 2 2)) (make-posn 5 5)) #t)
+(check-expect (check-obstacle-conditions (list (make-posn 12 12)) (vector (make-posn 0 0)) (make-posn 5 5)) #t)
+
 
 
 ;; all-reachable? : Vector<Posn> Posn List<Posn> -> Boolean
@@ -896,6 +952,10 @@
                                           (neighbors current)))
                    (new-visited (append visited new-neighbors)))
               (loop-bfs (append rest-queue new-neighbors) new-visited)))))))
+(check-expect (all-reachable? (vector (make-posn 1 1)) (make-posn 5 5) '()) #t)
+(check-expect (all-reachable? (vector (make-posn 12 12)) (make-posn 24 24) '()) #t)
+(check-expect (all-reachable? (vector (make-posn 1 1)) (make-posn 5 5) (list (make-posn 2 1) (make-posn 1 2))) #f)
+(check-expect (all-reachable? (vector (make-posn 5 5)) (make-posn 10 10) (list (make-posn 1 1) (make-posn 1 2))) #t)
 
 
 ;; generate-obstacles-safe : Vector<Posn> Posn -> List<Posn>
@@ -922,7 +982,8 @@
                 (loop count acc)))))))
 
 
- ;; generate-outer-obstacles : Number -> List<Posn>
+
+;; generate-outer-obstacles : Number -> List<Posn>
 ;; Purpose: Generates a list of positions representing "outer" obstacles or walls that border the central active game area. The size of the active area is determined by the input parameter `size`. 
 ;;          The function iterates through every cell in the entire grid (CELL-NUM-WIDTH by CELL-NUM-HEIGHT) and collects only those cells that fall outside the defined inner playing boundaries.
 ;; Termination argument: The function uses a nested recursive loop structure (`loop` with variables `x` and `y`) that iterates systematically through every cell in the W x H grid.
@@ -1034,7 +1095,6 @@
 
 
 
-
 ;; ====================== ;; Tick Handler ;; ======================
 
 
@@ -1059,6 +1119,11 @@
             (vector-set! result i (if (= i idx) new-food (vector-ref foods i)))
             (loop (add1 i)))
           result))))
+(check-expect (replace-food-at-index (vector (make-posn 1 1) (make-posn 2 2)) 0 (make-posn 3 3)) (vector (make-posn 3 3) (make-posn 2 2)))
+(check-expect (replace-food-at-index (vector (make-posn 1 1) (make-posn 2 2)) 1 (make-posn 3 3)) (vector (make-posn 1 1) (make-posn 3 3)))
+(check-expect (replace-food-at-index (vector (make-posn 1 1) (make-posn 2 2) (make-posn 4 4)) 2 (make-posn 5 5)) (vector (make-posn 1 1) (make-posn 2 2) (make-posn 5 5)))
+(check-expect (replace-food-at-index (vector (make-posn 1 1)) 0 (make-posn 9 9)) (vector (make-posn 9 9)))
+(check-expect (replace-food-at-index (vector (make-posn 1 1) (make-posn 2 2)) 5 (make-posn 3 3)) (vector (make-posn 1 1) (make-posn 2 2)))
 
 
 
@@ -1076,6 +1141,11 @@
       [(>= i (vector-length vec)) #f]
       [(pred (vector-ref vec i)) i]
       [else (loop (add1 i))])))
+(check-expect (vector-index (lambda (x) (= x 3)) (vector 1 2 3 4)) 2)
+(check-expect (vector-index (lambda (x) (= x 5)) (vector 1 2 3 4)) #f)
+(check-expect (vector-index (lambda (x) (even? x)) (vector 1 3 4 5)) 2)
+(check-expect (vector-index (lambda (x) (odd? x)) (vector 2 4 6 7)) 3)
+
 
 
 ;; =========================
