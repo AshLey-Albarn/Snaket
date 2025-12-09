@@ -319,10 +319,17 @@
 ;; Rendering Snake Game
 ;; ======================
 
+
+;; cell-center : Number -> Number
+;; Purpose: Given a grid cell index, returns the pixel coordinate of its center
 (define (cell-center n)
   (+ (* (sub1 n) CELL-SIZE)
      (/ CELL-SIZE 2)))
 
+;; draw-obstacles : List<Posn> Number Image -> Image
+;; Purpose: Draws all obstacles onto the scene. Obstacles that lie outside the central game area (defined by menu-size)
+;;          are drawn as red barriers, while inner obstacles use the standard OBSTACLE graphic (black).
+;; Termination argument: The function uses foldl, which iterates exactly once over every element in the input list `obstacles`.
 (define (draw-obstacles obstacles menu-size scene)
   (let* ([offset (quotient (- CELL-NUM-WIDTH menu-size) 2)]
          [start (+ offset 1)]
@@ -335,6 +342,11 @@
                             s)))
            scene obstacles)))
 
+
+;; draw-tail : Posn List<Posn> Image Color -> Image
+;; Purpose: Recursively draws the snake's body (all segments except the head) onto the scene.
+;;          It draws each segment using the correct image (straight or angled) based on the positions of the previous, current, and next segments.
+;; Termination argument: The recursion stops in the first conditional branch when the list `tail` is empty. In the recursive call, `(rest tail)` is passed, strictly reducing the list size by one in each step.
 (define (draw-tail prev tail scene color)
   (cond
     [(empty? tail) scene]
@@ -356,6 +368,12 @@
                           scene)])
        (draw-tail cur (rest tail) new-scene color))]))
 
+;; draw-snake : Vector<Posn> Symbol Image Color -> Image
+;; Purpose: Draws the entire snake onto the scene. It converts the snake position vector to a list,
+;;          then draws the body segments (tail) using `draw-tail`, and finally places the snake's head
+;;          (using the current direction `dir`) on top of the resulting scene.
+;; Termination argument: The function contains a base case for an empty snake list. The recursive helper function `draw-tail`
+;;                       is called with `(rest snake-list)`, ensuring termination.
 (define (draw-snake snake dir scene color)
   (let ([snake-list (vector->list snake)])
     (if (empty? snake-list)
@@ -371,68 +389,68 @@
                              scene-with-tail)])
           scene-with-head))))
 
+;; draw-foods : Vector<Posn> Image -> Image
+;; Purpose: Draws all food items (represented by the FRUIT image) onto the scene at their respective grid positions.
+;; Termination argument: The function uses a local recursive loop (`loop`) that increments the counter `i` by 1 in each step,
+;; stopping when $i$ reaches the total number of food items (`(vector-length foods)`).
 (define (draw-foods foods scene)
   (let loop ([i 0] [s scene])
     (if (>= i (vector-length foods))
         s
-        (let ([f (vector-ref foods i)]) ; f è un singolo posn
+        (let ([f (vector-ref foods i)])
           (loop (add1 i)
                 (place-image FRUIT
                              (cell-center (posn-x f))
                              (cell-center (posn-y f))
                              s))))))
 
-
-
-
-
+;; create-score-bar : Number Number Boolean -> Image
+;; Purpose: Creates the top score bar GUI element, which includes the current score, the high score (record), and two buttons (Restart and Pause/Resume).
+;; Termination argument: This function is non-recursive and terminates after a fixed number of image composition operations.
 (define (create-score-bar score record paused?)
   (let* ([score-text  (text (string-append "Score: " (number->string score)) 18 "white")]
          [record-text (text (string-append "Record: " (number->string record)) 18 "yellow")]
-         [button-spacing 10] ; distanza tra i pulsanti
+         [button-spacing 10]
          
-         ;; Restart
          [restart-button (overlay (text "Restart" 16 "black")
                                   (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray"))]
          
-         ;; Pause
          [pause-button (overlay (text (if paused? "Resume" "Pause") 16 "black")
                                 (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray"))]
          
          [score-area (rectangle SCENE-WIDTH TOP-BORDER-SIZE "solid" "black")]
          [center-x (/ SCENE-WIDTH 2)]
          
-         ;; posizionamento dei pulsanti al centro con spazio
          [restart-x (- center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
          [pause-x (+ center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
          
          [buttons-scene (place-image restart-button restart-x (/ TOP-BORDER-SIZE 2)
                             (place-image pause-button pause-x (/ TOP-BORDER-SIZE 2) score-area))]
          
-         ;; posizionamento score e record vicino ai bordi
-         [score-x (+ (/ BUTTON-WIDTH 2) 10)]                 ; 10 px di margine sinistro
-         [record-x (- SCENE-WIDTH (/ BUTTON-WIDTH 2) 10)])   ; 10 px di margine destro
+         [score-x (+ (/ BUTTON-WIDTH 2) 10)]
+         [record-x (- SCENE-WIDTH (/ BUTTON-WIDTH 2) 10)])
          
-    ;; comporre la scena finale
     (place-image score-text score-x (/ TOP-BORDER-SIZE 2)
       (place-image record-text record-x (/ TOP-BORDER-SIZE 2) buttons-scene))))
 
 
 
-
-
+;; draw-pause-button : Boolean Image -> Image
+;; Purpose: Creates and places the Pause/Resume button in the score bar area of the game scene. The button's label changes dynamically based on the current `paused?` state.
+;; Termination argument: This function is non-recursive and terminates after a fixed number of image composition operations.
 (define (draw-pause-button paused? scene)
   (let* ([button-bg (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray")]
          [label (if paused? "Resume" "Pause")]
          [button-label (text label 16 "black")]
          [button (overlay button-label button-bg)]
-         ;; posizioniamo il pulsante a destra del bottone Restart
-         [x (+ (/ SCENE-WIDTH 2) BUTTON-WIDTH 1)] ; 1 pixel di margine
-         [y (/ TOP-BORDER-SIZE 2)]) ; stessa altezza del bottone Restart
+         [x (+ (/ SCENE-WIDTH 2) BUTTON-WIDTH 1)]
+         [y (/ TOP-BORDER-SIZE 2)])
     (place-image button x y scene)))
 
 
-
+;; render-game : World -> Image
+;; Purpose: Renders the complete game visual state. It layers the grid, obstacles, snake, and food onto the game board, creates the top score bar, and assembles the final scene with borders.
+;; Termination argument: This function is non-recursive and executes a fixed sequence of image composition calls.
 (define (render-game w)
   (let* ([color (menu-color (world-menu w))] 
          [inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
@@ -453,6 +471,12 @@
 ;; ======================
 ;; Rendering Menu
 ;; ======================
+
+
+;; render-menu : Menu -> Image
+;; Purpose: Renders the main menu screen, displaying the game title, control instructions, and configurable settings (Speed, Mode, Size, Color, Fruits).
+;; It highlights the currently selected option (indicated by `menu-selector`) with a ">>" prefix and yellow text color.
+;; Termination argument: This function is non-recursive and executes a fixed sequence of image composition operations.
 (define (render-menu m)
   (let* ([sel (menu-selector m)]
          [cx (/ TOTAL-WIDTH 2)]
@@ -509,9 +533,15 @@
 ;; Key Handlers
 ;; ======================
 
+
+;; next-in-list : List<X> X -> X
+;; Purpose: Finds the element `x` in the list `lst` and returns the element immediately following it. 
+;;          If `x` is the last element in the list, it returns `x` (clamping the value).
+;; Termination argument: The function recursively calls itself with `(rest lst)`,
+;; strictly reducing the length of the list by 1 at each step. Since the list is finite, it eventually becomes empty, triggering the base case.
 (define (next-in-list lst x)
   (cond
-    [(empty? lst) x] ; caso impossibile ma sicuro
+    [(empty? lst) x]
     [(equal? (first lst) x)
      (if (empty? (rest lst))
          (first lst)
@@ -523,9 +553,8 @@
   (letrec ((helper
             (lambda (prev remaining full)
               (cond
-                [(empty? remaining) #f] ; x not found
+                [(empty? remaining) #f]
                 [(equal? (first remaining) x)
-                 ;; if prev exists, return it; else return last element of full
                  (if (not (eq? prev #f))
                      prev
                      (let loop ((l full))
@@ -539,7 +568,10 @@
 
 
 
-
+;; speed-label : Number -> String
+;; Purpose: Converts a given numeric speed value (delay in seconds) into its corresponding descriptive label string (e.g., "Slow", "Normal", "Fast").
+;; Termination argument: The local recursive helper function calls itself with `(rest slist)` and `(rest llist)`,
+;; strictly reducing the length of both lists by one in each step. Since `SPEEDS-LIST` is finite, the recursion will eventually terminate either when a match is found or when `slist` becomes empty, triggering the base case.
 (define (speed-label speed)
   (letrec ((helper (lambda (slist llist)
                      (cond
@@ -554,7 +586,6 @@
         [sel (menu-selector m)])
     
     (cond
-      ;; Movimento tra voci (W = up)
       [(member key '("w" "W"))
        (make-menu (menu-speed m)
                   (menu-mode m)
@@ -563,7 +594,6 @@
                   (prev-in-list selectors sel)
                   (menu-num-fruits m))]
 
-      ;; Movimento tra voci (S = down)
       [(member key '("s" "S"))
        (make-menu (menu-speed m)
                   (menu-mode m)
@@ -573,7 +603,6 @@
                   (menu-num-fruits m))]
 
       
-  ;; Decrement (A)
   [(or (string=? key "a") (string=? key "A"))
    (cond
      [(eq? sel 'speed)      (make-menu (prev-in-list SPEEDS-LIST (menu-speed m)) (menu-mode m) (menu-color m) (menu-size m) 'speed (menu-num-fruits m))]
@@ -582,7 +611,6 @@
      [(eq? sel 'color)      (make-menu (menu-speed m) (menu-mode m) (prev-in-list COLOR-OPTIONS (menu-color m)) (menu-size m) 'color (menu-num-fruits m))]
      [(eq? sel 'num-fruits) (make-menu (menu-speed m) (menu-mode m) (menu-color m) (menu-size m) 'num-fruits (if (= (menu-num-fruits m) 1) 5 (sub1 (menu-num-fruits m))))])]
   
-  ;; Increment (D)
   [(or (string=? key "d") (string=? key "D"))
    (cond
      [(eq? sel 'speed)      (make-menu (next-in-list SPEEDS-LIST (menu-speed m)) (menu-mode m) (menu-color m) (menu-size m) 'speed (menu-num-fruits m))]
@@ -591,7 +619,6 @@
      [(eq? sel 'color)      (make-menu (menu-speed m) (menu-mode m) (next-in-list COLOR-OPTIONS (menu-color m)) (menu-size m) 'color (menu-num-fruits m))]
      [(eq? sel 'num-fruits) (make-menu (menu-speed m) (menu-mode m) (menu-color m) (menu-size m) 'num-fruits (if (= (menu-num-fruits m) 5) 1 (add1 (menu-num-fruits m))))])]
   
-  ;; default
   [else m])
 ))
 
@@ -599,7 +626,9 @@
 
 
 
-
+;; menu-key : Menu String -> Menu
+;; Purpose: Handles keyboard input when the game is in the 'menu mode. It updates the menu state (`Menu` structure) by changing the currently selected option (using 'w'/'s')
+;;          or modifying the value of the selected option (using 'a'/'d').
 (define (handle-key-game w key)
   (let ([dir (world-dir w)]
         [snake (world-snake w)])
@@ -625,7 +654,7 @@
                (make-world 'game
             (world-menu w)
             snake
-            'up   ; or 'down, 'left, 'right
+            'up
             (world-foods w)
             (world-game-over? w)
             (world-score w)
@@ -641,7 +670,7 @@
                (make-world 'game
             (world-menu w)
             snake
-            'down   ; or 'down, 'left, 'right
+            'down
             (world-foods w)
             (world-game-over? w)
             (world-score w)
@@ -657,7 +686,7 @@
                (make-world 'game
             (world-menu w)
             snake
-            'left   ; or 'down, 'left, 'right
+            'left
             (world-foods w)
             (world-game-over? w)
             (world-score w)
@@ -673,7 +702,7 @@
                (make-world 'game
             (world-menu w)
             snake
-            'right   ; or 'down, 'left, 'right
+            'right
             (world-foods w)
             (world-game-over? w)
             (world-score w)
@@ -687,21 +716,22 @@
           [else w]))))
 
 
-
-
-;; ======================
-;; Wrap-around helper
-;; ======================
+;; active-grid-bounds : Number -> List<Number>
+;; Purpose: Calculates the grid boundaries (min X, max X, min Y, max Y) for the active, central play area based on the desired `size` of the inner square grid.
+;;          The resulting active area is centered within the total grid defined by CELL-NUM-WIDTH/HEIGHT.
 (define (active-grid-bounds size)
   (let* ([offset (quotient (- CELL-NUM-WIDTH size) 2)]
          [min-cell (+ offset 1)]
          [max-cell (- CELL-NUM-WIDTH offset)])
-    (list min-cell max-cell min-cell max-cell))) ; min-x, max-x, min-y, max-y
- ; min-x, max-x, min-y, max-y
+    (list min-cell max-cell min-cell max-cell)))
 
+
+;; wrap-head : Posn Number -> Posn
+;; Purpose: Takes a potential snake head position (`head`) and a game grid `size`, and applies wrap-around logic.
+;;          If the head moves outside the active playing area boundaries (determined by `active-grid-bounds`), it is repositioned to the corresponding cell on the opposite side of the active area.
+;; Termination argument: This function is non-recursive and terminates after a fixed set of coordinate checks and arithmetic operations.
 (define (wrap-head head size)
   (local 
-    ;; recursive extraction of four bounds from a list
     ((define (extract-bounds lst)
        (cond
          [(empty? lst) (error "Bounds list too short")]
@@ -732,10 +762,11 @@
              [(> y max-y) min-y]
              [else y])))))
 
-
-;; ======================
-;; Helper: Valid position (inside grid, not on snake, food, or obstacle)
-;; ======================
+;; valid-position? : Posn Vector<Posn> Posn List<Posn> -> Boolean
+;; Purpose: Checks if a given position `p` is a valid and unoccupied cell within the game grid boundaries. 
+;;          A position is valid if it is within the grid (1 to CELL-NUM-WIDTH/HEIGHT, inclusive) and does not coincide with any existing obstacles, the single food item, or any segment of the snake's body.
+;; Termination argument: The function contains a local recursive loop (`loop`) that iterates over the `snake` vector.
+;; The counter `i` starts at 0 and increments by 1 in each recursive call, ensuring termination when $i$ reaches the length of the vector.
 (define (valid-position? p snake food obstacles)
   (and (>= (posn-x p) 1) (<= (posn-x p) CELL-NUM-WIDTH)
        (>= (posn-y p) 1) (<= (posn-y p) CELL-NUM-HEIGHT)
@@ -748,9 +779,10 @@
                  #f
                  (loop (add1 i)))))))
 
-;; ======================
-;; Helper: Count free neighbors of a tile
-;; ======================
+;; free-neighbors : Posn Vector<Posn> List<Posn> -> Number
+;; Purpose: Calculates the number of adjacent (north, south, east, west) cells around a given position `p` that are currently free. 
+;;          A cell is considered free if it is within the grid bounds, is not an obstacle, and is not occupied by the snake's body (excluding the snake's head itself).
+;; Termination argument: This function is non-recursive. It iterates exactly four times using `foldl` over the fixed list `neighbors` (containing 4 elements), ensuring termination.
 (define (free-neighbors p snake obstacles)
   (let ([neighbors (list
                     (make-posn (- (posn-x p) 1) (posn-y p))
@@ -766,25 +798,29 @@
                  acc))
            0 neighbors)))
 
-;; ======================
-;; Helper: Safe to place obstacle
-;; ======================
+
+;; safe-to-place? : Posn List<Posn> Vector<Posn> Posn -> Boolean
+;; Purpose: Determines if a food item can be placed safely at position `p`. This check ensures:
+;;          1. `p` is within grid bounds.
+;;          2. `p` is not an obstacle.
+;;          3. `p` is not occupied by the snake (body or head).
+;;          4. `p` is not directly in front of the snake's head (preventing immediate food collection).
+;;          5. Placing food at `p` does not immediately isolate any neighboring cells, ensuring the snake can still navigate and avoiding trivial win states (Dead-End Detection using `free-neighbors`).
+;; Termination argument: The function contains a local recursive loop (`loop`) that iterates over the `snake` vector, strictly reducing the index `i` towards the vector's length.
+;; The second check uses `foldl`, which iterates over a fixed 4-element list of neighbors, guaranteeing termination.
 (define (safe-to-place? p obstacles snake head)
-  ;; due celle davanti alla testa iniziale (always right)
   (let ([front-cells (list (make-posn (+ 1 (posn-x head)) (posn-y head))
                            (make-posn (+ 2 (posn-x head)) (posn-y head)))])
     (and (>= (posn-x p) 1) (<= (posn-x p) CELL-NUM-WIDTH)
          (>= (posn-y p) 1) (<= (posn-y p) CELL-NUM-HEIGHT)
          (not (member p obstacles))
-         (not (member p front-cells)) ; <- esclude le due celle davanti alla testa
-         ;; non deve essere sul serpente
+         (not (member p front-cells))
          (let loop ([i 0])
            (if (>= i (vector-length snake))
                #t
                (if (equal? (vector-ref snake i) p)
                    #f
                    (loop (add1 i)))))
-         ;; tutti i vicini devono avere almeno 2 liberi se mettiamo l'ostacolo
          (let ([neighbors (list
                            (make-posn (- (posn-x p) 1) (posn-y p))
                            (make-posn (+ (posn-x p) 1) (posn-y p))
@@ -798,9 +834,11 @@
                   neighbors)))))
 
 
-;; ======================
-;; Check all non-obstacle tiles have at least 2 free neighbors
-;; ======================
+;; check-obstacle-conditions : List<Posn> Vector<Posn> Posn -> Boolean
+;; Purpose: Iterates through every cell in the grid (from (1, 1) to (CELL-NUM-WIDTH, CELL-NUM-HEIGHT)) to ensure that the current placement of obstacles does not create an immediate dead-end for the snake.
+;;          A cell that is not an obstacle must have at least two free neighbors (excluding the snake's head). If any non-obstacle cell fails this check, the function returns #f.
+;; Termination argument: The function uses a nested recursive loop structure (`loop` with variables `x` and `y`) that iterates systematically through every cell in the W x H grid.
+;; Since W and H are fixed constants, the loop will eventually complete when y exceeds CELL-NUM-HEIGHT, guaranteeing termination.
 (define (check-obstacle-conditions obstacles snake food)
   (let loop ([x 1] [y 1])
     (if (> y CELL-NUM-HEIGHT)
@@ -816,15 +854,18 @@
                       (loop (+ x 1) y)
                       (loop 1 (+ y 1)))))))))
 
-;; ======================
-;; all-reachable? 
-;; ======================
+
+;; all-reachable? : Vector<Posn> Posn List<Posn> -> Boolean
+;; Purpose: Checks for **board segmentation** by determining if every non-obstacle cell in the grid is reachable from the snake's current head position. This is achieved by running a Breadth-First Search (BFS) starting at the snake's head.
+;;          If, after the search completes, any non-obstacle cell remains unvisited, it means the board is split into isolated sections, and the function returns #f.
+;; Termination argument: The function uses two recursive loops:
+;;          1. `loop-bfs`: This is a classic BFS algorithm. Since the number of nodes (grid cells) is finite, the search must eventually visit all reachable nodes, and the queue will become empty, guaranteeing termination.
+;;          2. `loop-check`: A nested recursive loop that iterates systematically through every cell in the W x H grid. Since W and H are fixed constants, this loop is guaranteed to terminate when y exceeds height.
 (define (all-reachable? snake food obstacles)
   (let ((width CELL-NUM-WIDTH)
         (height CELL-NUM-HEIGHT)
         (start (vector-ref snake 0)))
 
-    ;; neighbors è una variabile che contiene una procedura
     (let ((neighbors
            (lambda (pos)
              (filter (lambda (p)
@@ -837,24 +878,18 @@
                       (make-posn (posn-x pos) (+ 1 (posn-y pos)))
                       (make-posn (posn-x pos) (- (posn-y pos) 1)))))))
 
-      ;; BFS tramite named let: queue e visited sono liste di posn
       (let loop-bfs ((queue (list start)) (visited (list start)))
         (if (empty? queue)
-            ;; BFS terminata: controlla tutte le celle libere siano in `visited`
             (let loop-check ((x 1) (y 1))
               (cond
                 [(> y height) #t]
                 [else
                  (let ((pos (make-posn x y)))
                    (cond
-                     ;; se è un ostacolo, salto
                      [(member pos obstacles)
                       (if (< x width) (loop-check (+ x 1) y) (loop-check 1 (+ y 1)))]
-                     ;; se è libera ma non raggiunta -> fallisce
                      [(not (member pos visited)) #f]
-                     ;; altrimenti continua
                      [else (if (< x width) (loop-check (+ x 1) y) (loop-check 1 (+ y 1)))]))]))
-            ;; BFS continua: prendi current, calcola nuovi vicini non visitati
             (let* ((current (first queue))
                    (rest-queue (rest queue))
                    (new-neighbors (filter (lambda (p) (not (member p visited)))
@@ -862,9 +897,15 @@
                    (new-visited (append visited new-neighbors)))
               (loop-bfs (append rest-queue new-neighbors) new-visited)))))))
 
-;; ======================
-;; generate-obstacles-safe (usa safe-to-place?)
-;; ======================
+
+;; generate-obstacles-safe : Vector<Posn> Posn -> List<Posn>
+;; Purpose: Generates a list of obstacle positions ensuring that the placement is safe and does not immediately partition the game board or block the snake's path.
+;;          It calculates a target number of obstacles, then repeatedly attempts to place them at random positions using the safe-to-place? check.
+;; If the final set of obstacles makes the board unsolvable (checked by all-reachable?), the function restarts the generation process entirely.
+;; Termination argument: This function is doubly recursive:
+;;          1. Outer Recursion (Base Case Failure): If the final set of generated obstacles fails the all-reachable? test (meaning the board is partitioned),
+;;             the function calls itself recursively (generate-obstacles-safe snake food), restarting the process. This is a probabilistic recursion that assumes a valid configuration will eventually be found.
+;;          2. Inner Recursion (Loop): The inner named loop (loop) attempts to place the required number of obstacles (count). Since count is strictly decreased only upon successful placement, the inner loop continues until count reaches 0.
 (define (generate-obstacles-safe snake food)
   (let* ([head (vector-ref snake 0)]
          [num-obstacles (/ (* CELL-NUM-WIDTH CELL-NUM-HEIGHT)
@@ -881,7 +922,11 @@
                 (loop count acc)))))))
 
 
-
+ ;; generate-outer-obstacles : Number -> List<Posn>
+;; Purpose: Generates a list of positions representing "outer" obstacles or walls that border the central active game area. The size of the active area is determined by the input parameter `size`. 
+;;          The function iterates through every cell in the entire grid (CELL-NUM-WIDTH by CELL-NUM-HEIGHT) and collects only those cells that fall outside the defined inner playing boundaries.
+;; Termination argument: The function uses a nested recursive loop structure (`loop` with variables `x` and `y`) that iterates systematically through every cell in the W x H grid.
+;; Since W and H are fixed constants, the loop is guaranteed to terminate when y exceeds CELL-NUM-HEIGHT.
 (define (generate-outer-obstacles size)
   (let* ([offset (quotient (- CELL-NUM-WIDTH size) 2)]
          [start (+ offset 1)]
@@ -893,24 +938,26 @@
             [else (loop (add1 x) y acc)]))))
 
 
-
+;; handle-key-unified : World String -> World
+;; Purpose: Acts as the main key event dispatcher, deciding how to handle a keyboard press based on the current mode of the game (menu or game).
+;;          - In 'menu mode: If the key is "spacebar", it initializes a new game based on current menu settings (calculating obstacles, foods, and boundaries) and switches the mode to 'game.
+;;            Otherwise, it updates the menu settings using `menu-key`.
+;;          - In 'game mode: If the game is over (win or loss) and the key is "spacebar", it resets the world state to 'menu mode. If the key is 'l' (for 'lose' or 'leak' in some contexts, or simply a debugging tool),
+;;            it forces a loss condition. Otherwise, it delegates control to the game-specific key handler, `handle-key-game`.
 (define (handle-key-unified w key)
   (cond
-    ;; ===== Menu =====
     [(symbol=? (world-mode w) 'menu)
      (cond
-       ;; Premendo SPACE parte il gioco
        [(key=? key " ")
   (let* ([menu-updated (world-menu w)]
          [num-fruits   (menu-num-fruits menu-updated)]
-         [foods        (random-foods initial-snake '() num-fruits)] ; generate all fruits
+         [foods        (random-foods initial-snake '() num-fruits)]
          [obs          (if (eq? (menu-mode menu-updated) 'Obstacles)
                            (generate-obstacles-safe initial-snake foods)
                            '())]
          [size         (menu-size menu-updated)]
          [outer        (if (< size 25) (generate-outer-obstacles size) '())]
          [total-obstacles (append obs outer)]
-         ;; if any food spawned inside obstacles, regenerate individually
          [final-foods  (list->vector
                         (map (lambda (f)
                                (if (member f total-obstacles)
@@ -931,9 +978,7 @@
      total-obstacles
      free
      #f))]
-
        
-       ;; Tutti gli altri tasti modificano il menu
        [else
         (make-world
          'menu
@@ -949,10 +994,8 @@
          0
          #f)])]
 
-    ;; ===== Game =====
     [(symbol=? (world-mode w) 'game)
      (cond
-       ;; Se il gioco è finito e premi SPACE → torna al menu
        [(and (or (eq? (world-game-over? w) #t)
                  (eq? (world-game-over? w) 'win))
              (key=? key " "))
@@ -970,7 +1013,6 @@
          0
          #f)]
 
-       ;; Se premi "L" → score = free-spaces - 1
        [(or (key=? key "l") (key=? key "L"))
         (make-world
          'game
@@ -986,7 +1028,6 @@
          (world-free-spaces w)
          #f)]
 
-       ;; Altrimenti gestisci normalmente i tasti del gioco
        [else
         (handle-key-game w key)])]))
 
@@ -996,10 +1037,19 @@
 
 ;; ====================== ;; Tick Handler ;; ======================
 
+
+;; obstacle-collision? : Posn List<Posn> -> Boolean
+;; Purpose: Checks if the snake's head position (`head`) is currently overlapping with any of the defined grid obstacles (`obstacles`). Returns #t if a collision occurs, and #f otherwise.
 (define (obstacle-collision? head obstacles)
   (member head obstacles))
 
-;; Helper: replace an element at a given index in a vector
+
+
+;; replace-food-at-index : Vector<Posn> Number Posn -> Vector<Posn>
+;; Purpose: Creates and returns a new food vector where the element at the specified index (`idx`) has been replaced by `new-food`, while all other elements remain unchanged.
+;;          The function explicitly uses `vector-set!` to build the new vector in place, and then returns the complete vector.
+;; Termination argument: The function uses a local recursive loop (`loop`) where the counter `i` starts at 0 and increments by 1 in each step.
+;; The loop terminates when `i` reaches the total length of the vector (`n`), ensuring all elements are processed exactly once.
 (define (replace-food-at-index foods idx new-food)
   (let* ([n (vector-length foods)]
          [result (make-vector n)])
@@ -1015,7 +1065,11 @@
 
 
 
-;; Helper: find index of an element in a vector that satisfies a predicate
+;; vector-index : (Any -> Boolean) Vector<Any> -> (or/c Number #f)
+;; Purpose: Searches for the first element in the vector `vec` that satisfies the given predicate function `pred`.
+;;          It returns the index (position) of the first matching element, or #f if no element satisfies the predicate.
+;; Termination argument: The function uses a local recursive loop (`loop`) where the counter `i` starts at 0 and increments by 1 in each step.
+;; The loop terminates when `i` reaches the total length of the vector (`(vector-length vec)`), ensuring all elements are checked exactly once.
 (define (vector-index pred vec)
   (let loop ([i 0])
     (cond
@@ -1023,17 +1077,27 @@
       [(pred (vector-ref vec i)) i]
       [else (loop (add1 i))])))
 
+
 ;; =========================
 ;; Update game function
 ;; =========================
+
+
+;; update-game : World -> World
+;; Purpose: The main tick function for the game. It advances the game state based on the configured speed.
+;;          1. Game Over Check: If the game is already over ('win' or #t), it returns the current world unchanged.
+;;          2. Pause Check: If the snake's direction is 'none' (paused), it returns the current world unchanged.
+;;          3. Speed Control (Tick Counting): It uses a counter (`world-tick-counter`) and a speed threshold derived from `menu-speed` to determine if a full game step should occur. If the counter is below the threshold, it just increments the counter and returns the world.
+;;          4. Movement: If the threshold is met, it calculates the `new-head` position, applying wrap-around logic (`wrap-head`) if the mode is 'Pacman'.
+;;          5. Food Consumption: It checks for food collision (`ate-index`). If food is eaten, it generates a new food item, increases the score, updates the record, grows the snake, and checks for a win condition (snake fills all free spaces).
+;;          6. Collision Check: If no food is eaten, it checks for collisions: wall (if not Pacman mode), self-collision, or obstacle collision. If any collision occurs, it sets the `world-game-over?` flag to #t.
+;;          7. Normal Move: If no collision and no food is eaten, it moves the snake by dropping the tail, keeping the length the same.
 (define (update-game w)
   (cond
-    ;; gioco finito
     [(or (eq? (world-game-over? w) #t)
          (eq? (world-game-over? w) 'win))
      w]
 
-    ;; serpente fermo
     [(symbol=? (world-dir w) 'none)
      w]
 
@@ -1043,7 +1107,6 @@
             [threshold (inexact->exact (round (/ speed 0.02)))])
        
        (if (< counter threshold)
-           ;; ancora non muovere
            (make-world 'game
                        (world-menu w)
                        (world-snake w)
@@ -1057,14 +1120,12 @@
                        (world-free-spaces w)
                        #f)
            
-           ;; muovi il serpente
            (let* ([snake      (world-snake w)]
                   [dir        (world-dir w)]
                   [foods      (world-foods w)]
                   [score      (world-score w)]
                   [record     (world-record w)]
                   [head       (vector-ref snake 0)]
-                  ;; Pac-Man wrap
                   [new-head (if (eq? (menu-mode (world-menu w)) 'Pacman)
               (wrap-head (move-head head dir)
                          (menu-size (world-menu w)))
@@ -1072,12 +1133,9 @@
 
                   [snake-list (vector->list snake)]
                   [new-snake  (cons new-head snake-list)]
-                  ;; indice del frutto mangiato
                   [ate-index (vector-index (lambda (f) (equal? new-head f)) foods)])
              
-             ;; serpente ha mangiato un frutto
              (if (not (eq? ate-index #f))
-    ;; serpente ha mangiato
     (let* ([new-score  (+ score 1)]
            [new-record (max record new-score)]
            [new-food   (vector-ref (random-foods (list->vector new-snake)
@@ -1109,14 +1167,12 @@
                       (world-obstacles w)
                       (world-free-spaces w)
                       #f)))
-    ;; serpente non mangia
     (let ([shrunk (reverse (rest (reverse new-snake)))])
       (if (or (and (not (eq? (menu-mode (world-menu w)) 'Pacman))
                    (wall-collision? new-head))
               (self-collision? new-head (list->vector shrunk))
               (obstacle-collision? new-head (world-obstacles w))
               (not (eq? (vector-index (lambda (f) (equal? f new-head)) foods) #f)))
-          ;; game over
           (make-world 'game
                       (world-menu w)
                       snake
@@ -1129,7 +1185,6 @@
                       (world-obstacles w)
                       (world-free-spaces w)
                       #f)
-          ;; avanzamento normale
           (make-world 'game
                       (world-menu w)
                       (list->vector shrunk)
@@ -1146,6 +1201,10 @@
 
 
 
+;; update-unified : World -> World
+;; Purpose: Acts as the top-level timer function for the entire game application. It decides whether to advance the game state or return the world unchanged based on the current mode and pause state.
+;;          - If the world is in 'menu mode or if the game is explicitly paused (world-paused? is true), it returns the world structure w without modifying it.
+;;          - Otherwise (if in 'game mode and not paused), it calls the core logic function, update-game, to advance the snake's position, handle collisions, and update scores.
 (define (update-unified w)
   (if (or (symbol=? (world-mode w) 'menu)
           (world-paused? w))
@@ -1154,9 +1213,15 @@
 
 
 ;; ====================== ;; Mouse Handler ;; ======================
+
+;; handle-mouse-unified : World Number Number String -> World
+;; Purpose: Handles mouse click events within the game world, specifically checking for clicks on control buttons located in the game's display area.
+;;          1. Restart Button Check: If the world is in 'game mode and the mouse event is a "button-down" click within the calculated bounds of the **Restart button** (left of center), it resets the game state to 'menu mode with initial settings.
+;;          2. Pause Button Check: If the world is in 'game mode and the mouse event is a "button-down" click within the calculated bounds of the **Pause button** (right of center), it toggles the `world-paused?` flag, either pausing or unpausing the game.
+;;          3. No Action: For all other world modes or clicks outside these button areas, it returns the world state unchanged.
+;; Termination argument: This function is non-recursive and terminates after a fixed series of conditional checks and structure creation operations. The coordinate and boundary calculations are direct arithmetic operations.
 (define (handle-mouse-unified w x y event)
   (cond
-    ;; Click Restart
 [(and (symbol=? (world-mode w) 'game)
       (string=? event "button-down")
       (let* ([center-x (/ SCENE-WIDTH 2)]
@@ -1179,7 +1244,6 @@
              (count-free-spaces '())
              #f)]
 
-;; Click Pause
 [(and (symbol=? (world-mode w) 'game)
       (string=? event "button-down")
       (let* ([center-x (/ SCENE-WIDTH 2)]
@@ -1207,9 +1271,13 @@
 
 
 
-;; ======================
-;; Rendering Game Over Screen
-;; ======================
+;; render-game-over : World -> Image
+;; Purpose: Creates and displays the "Game Over" screen image when the snake game ends (either by loss or a win, though 'win' state typically uses a similar but distinct rendering).
+;;          It draws text elements on top of a black background, centered horizontally. The displayed information includes:
+;;          1. The "GAME OVER" message.
+;;          2. The final score achieved in the completed game (world-score w).
+;;          3. The highest score ever achieved (world-record w).
+;;          4. Instructions to press SPACE to navigate back to the menu.
 (define (render-game-over w)
   (place-image
    (text "GAME OVER" 36 "red")
@@ -1224,9 +1292,13 @@
       (text "Press SPACE to return to menu" 22 "cyan")
       (/ TOTAL-WIDTH 2) 280
       (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black"))))))
-;; ======================
-;; Rendering Win Screen
-;; ======================
+
+;; render-win : World -> Image
+;; Purpose: Creates and displays the "You Win!" screen image when the player successfully completes the game (the snake has consumed all available food and filled all free spaces on the board).
+;;          It draws text elements on top of a black background, centered horizontally. The displayed information includes:
+;;          1. The large "YOU WIN!" message in green.
+;;          2. The final score achieved (world-score w).
+;;          3. Instructions to press SPACE to navigate back to the menu.
 (define (render-win w)
   (place-image
    (text "YOU WIN!" 40 "green")
@@ -1240,14 +1312,21 @@
      (/ TOTAL-WIDTH 2) 260
      (rectangle TOTAL-WIDTH TOTAL-HEIGHT "solid" "black")))))
 
-;; ====================== ;; Unified Render ;; ======================
 
+
+;; render-unified : World -> Image
+;; Purpose: The main image rendering dispatcher for the entire game application.
+;; It determines which screen to display based on the current state of the game (the `world-mode` and `world-game-over?` fields of the World structure `w`).
+;;          1. Menu Mode: If the mode is 'menu, it calls `render-menu` to draw the configuration screen.
+;;          2. Game Over States: If the game is over, it checks the specific outcome:
+;;             - If `world-game-over?` is 'win, it calls `render-win`.
+;;             - Otherwise (if `world-game-over?` is true, indicating a loss), it calls `render-game-over`.
+;;          3. Active Game Mode: If the mode is 'game and the game is not over, it calls `render-game` to draw the active gameplay screen (snake, food, obstacles, score).
 (define (render-unified w)
   (cond
     [(symbol=? (world-mode w) 'menu)
      (render-menu (world-menu w))]
 
-    ;; Se il gioco è finito o vinto
     [(or (eq? (world-game-over? w) #t)
          (eq? (world-game-over? w) 'win))
      (cond
@@ -1255,16 +1334,29 @@
         (render-win w)]
        [else
         (render-game-over w)])]
-
-    ;; Gioco in corso
+    
     [(symbol=? (world-mode w) 'game)
      (render-game w)]))
 
 
 
 
-;; Initial World
-
+;; initial-world : World
+;; Purpose: Defines the initial state of the entire game world structure when the program starts.
+;;          It sets the game mode to **'menu** (indicating the user starts at the configuration screen). All gameplay-related fields (snake position, direction, foods, score, etc.) are set to their starting or default values, and the game is initially not paused.
+;; Fields initialized:
+;; - world-mode: 'menu (Starting state)
+;; - world-menu: initial-menu (Default menu settings)
+;; - world-snake: initial-snake (Starting snake position)
+;; - world-dir: initial-dir (Starting direction, likely 'right or 'none)
+;; - world-foods: initial-foods (Starting food vector)
+;; - world-game-over?: #f (Not game over)
+;; - world-score: initial-score (Starting score, likely 0)
+;; - world-record: initial-record (Highest score achieved so far)
+;; - world-tick-counter: 0 (Game clock reset)
+;; - world-obstacles: '() (No obstacles initially)
+;; - world-free-spaces: (count-free-spaces '()) (Total available cells on the board)
+;; - world-paused?: #f (Not paused)
 (define initial-world
   (make-world 'menu
               initial-menu
@@ -1282,6 +1374,14 @@
 
 ;; ====================== ;; Run Big-Bang ;; ======================
 
+
+;; big-bang call
+;; Purpose: Initiates the entire Snake game application using the big-bang function from the #lang htdp/universe library (or similar Racket world-building environment).
+;;          This function starts the game loop with the defined `initial-world` state and connects all core event handlers:
+;;          - [to-draw render-unified]: Specifies the function responsible for drawing the current state of the world (menu, game, game over, or win screen).
+;;          - [on-tick update-unified 0.02]: Specifies the function called repeatedly at a fixed rate (every 0.02 seconds, or 50 times per second) to advance the game state.
+;;          - [on-key handle-key-unified]: Specifies the function called whenever a keyboard key is pressed.
+;;          - [on-mouse handle-mouse-unified]: Specifies the function called whenever a mouse button is clicked or moved.
 (big-bang initial-world
   [to-draw render-unified]
   [on-tick update-unified 0.02]
