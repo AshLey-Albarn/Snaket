@@ -332,20 +332,17 @@
 
 
 ;; draw-obstacles : List<Posn> Number Image -> Image
-;; Purpose: Draws all obstacles onto the scene. Obstacles that lie outside the central game area (defined by menu-size)
-;;          are drawn as red barriers, while inner obstacles use the standard OBSTACLE graphic (black).
+;; Purpose: Draws all obstacles onto the scene. Every obstacle is drawn using the OBSTACLE graphic.
 ;; Termination argument: The function uses foldl, which iterates exactly once over every element in the input list `obstacles`.
 (define (draw-obstacles obstacles menu-size scene)
-  (let* ([offset (quotient (- CELL-NUM-WIDTH menu-size) 2)]
-         [start (+ offset 1)]
-         [end (- CELL-NUM-WIDTH offset)])
-    (foldl (lambda (p s)
-             (let ([is-outer (or (< (posn-x p) start) (> (posn-x p) end) (< (posn-y p) start) (> (posn-y p) end))])
-               (place-image (if is-outer (rectangle CELL-SIZE CELL-SIZE "solid" "black") OBSTACLE)
-                            (cell-center (posn-x p))
-                            (cell-center (posn-y p))
-                            s)))
-           scene obstacles)))
+  (foldl (lambda (p s)
+           (place-image OBSTACLE
+                        (cell-center (posn-x p))
+                        (cell-center (posn-y p))
+                        s))
+         scene
+         obstacles))
+
 
 
 ;; draw-tail : Posn List<Posn> Image Color -> Image
@@ -559,7 +556,12 @@
 (check-expect (next-in-list '(4 5 6) 7) 7)
 (check-expect (next-in-list '(1 2 2 3) 2) 2)
 
-
+;; prev-in-list : List<X> X -> X or #f
+;; Purpose: Finds the element `x` in the list `lst` and returns the element immediately preceding it. 
+;;          If `x` is the first element in the list, it returns the last element (wrapping around). 
+;;          If `x` is not in the list, it returns #f.
+;; Termination argument: At each recursive call, the length of `remaining` decreases by 1. 
+;;                       Since the list is finite, it eventually becomes empty, triggering the base case.
 
 (define (prev-in-list lst x)
   (letrec ((helper
@@ -648,9 +650,13 @@
 
 
 
-;; menu-key : Menu String -> Menu
-;; Purpose: Handles keyboard input when the game is in the 'menu mode. It updates the menu state (`Menu` structure) by changing the currently selected option (using 'w'/'s')
-;;          or modifying the value of the selected option (using 'a'/'d').
+;; handle-key-game : World String -> World
+;; Purpose: Handles keyboard input when the game is in 'game mode'. 
+;;          Updates the game state (`World` structure) by changing the snake's direction 
+;;          based on the key pressed. The keys 'w'/'up' move the snake up, 
+;;          's'/'down' move it down, 'a'/'left' move it left, and 'd'/'right' move it right. 
+;;          The snake cannot reverse direction (e.g., going 'up' if it is currently 'down').
+
 (define (handle-key-game w key)
   (let* ([dir (world-dir w)]
          [snake (world-snake w)]
@@ -698,22 +704,13 @@
 ;;          If the head moves outside the active playing area boundaries (determined by `active-grid-bounds`), it is repositioned to the corresponding cell on the opposite side of the active area.
 ;; Termination argument: This function is non-recursive and terminates after a fixed set of coordinate checks and arithmetic operations.
 (define (wrap-head head size)
-  (local 
+  (local
     ((define (extract-bounds lst)
-       (cond
-         [(empty? lst) (error "Bounds list too short")]
-         [else
-          (let ([min-x (first lst)]
-                [rest1 (rest lst)])
-            (if (empty? rest1) (error "Bounds list too short")
-                (let ([max-x (first rest1)]
-                      [rest2 (rest rest1)])
-                  (if (empty? rest2) (error "Bounds list too short")
-                      (let ([min-y (first rest2)]
-                            [rest3 (rest rest2)])
-                        (if (empty? rest3) (error "Bounds list too short")
-                            (let ([max-y (first rest3)])
-                              (list min-x max-x min-y max-y))))))))])))
+       (let ([min-x (first lst)]
+             [max-x (first (rest lst))]
+             [min-y (first (rest (rest lst)))]
+             [max-y (first (rest (rest (rest lst))))])
+         (list min-x max-x min-y max-y))))
     (let* ([bounds (extract-bounds (active-grid-bounds size))]
            [min-x (first bounds)]
            [max-x (second bounds)]
