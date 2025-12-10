@@ -341,7 +341,7 @@
          [end (- CELL-NUM-WIDTH offset)])
     (foldl (lambda (p s)
              (let ([is-outer (or (< (posn-x p) start) (> (posn-x p) end) (< (posn-y p) start) (> (posn-y p) end))])
-               (place-image (if is-outer (rectangle CELL-SIZE CELL-SIZE "solid" "red") OBSTACLE)
+               (place-image (if is-outer (rectangle CELL-SIZE CELL-SIZE "solid" "black") OBSTACLE)
                             (cell-center (posn-x p))
                             (cell-center (posn-y p))
                             s)))
@@ -1061,7 +1061,7 @@
 ;;          Returns the index of the eaten food, or #f if none was eaten.
 ;; Termination argument: Delegates to vector-index, which is finite and terminating.
 (define (snake-ate? new-head foods)
-  (vector-index (λ (f) (equal? f new-head)) foods))
+  (vector-index (lambda (f) (equal? f new-head)) foods))
 
 ;; handle-eat : World Posn Number -> World
 ;; Purpose: Handles the full sequence of events that occur when the snake eats food:
@@ -1116,7 +1116,7 @@
            (wall-collision? new-head))
       (self-collision? new-head (list->vector shrunk))
       (obstacle-collision? new-head (world-obstacles w))
-      (not (eq? (vector-index (λ (f) (equal? f new-head))
+      (not (eq? (vector-index (lambda (f) (equal? f new-head))
                               (world-foods w))
                 #f))))
 
