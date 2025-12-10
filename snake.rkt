@@ -669,15 +669,14 @@
               [(left) 'right]
               [(right) 'left]
               [else #f]))])
-
+    
     (cond
-      [(symbol=? dir 'none)
-       (make-world 'game (world-menu w) snake 'right (world-foods w) (world-game-over? w) (world-score w) (world-record w) (world-tick-counter w) (world-obstacles w) (world-free-spaces w) #f)]
-
-      [(symbol=? (opposite dir) requested-dir) w]
-
-      [else
-       (make-world 'game (world-menu w) snake requested-dir (world-foods w) (world-game-over? w) (world-score w) (world-record w) (world-tick-counter w) (world-obstacles w) (world-free-spaces w) #f)])))
+  [(or (false? requested-dir)
+       (and (symbol? requested-dir)
+            (symbol? (opposite dir))
+            (symbol=? (opposite dir) requested-dir))) w]
+  [else
+   (make-world 'game (world-menu w) snake requested-dir (world-foods w) (world-game-over? w) (world-score w) (world-record w) (world-tick-counter w) (world-obstacles w) (world-free-spaces w) #f)])))
 
 
 ;; active-grid-bounds : Number -> List<Number>
