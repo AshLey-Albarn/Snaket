@@ -652,90 +652,32 @@
 ;; Purpose: Handles keyboard input when the game is in the 'menu mode. It updates the menu state (`Menu` structure) by changing the currently selected option (using 'w'/'s')
 ;;          or modifying the value of the selected option (using 'a'/'d').
 (define (handle-key-game w key)
-  (let ([dir (world-dir w)]
-        [snake (world-snake w)])
-    
-    (if (symbol=? dir 'none)
-        (make-world 'game
-            (world-menu w)
-            snake
-            'right
-            (world-foods w)
-            (world-game-over? w)
-            (world-score w)
-            (world-record w)
-            (world-tick-counter w)
-            (world-obstacles w)
-            (world-free-spaces w)
-            #f)
+  (let* ([dir (world-dir w)]
+         [snake (world-snake w)]
+         [requested-dir
+          (cond
+            [(or (key=? key "up") (key=? key "W") (key=? key "w")) 'up]
+            [(or (key=? key "down") (key=? key "S") (key=? key "s")) 'down]
+            [(or (key=? key "left") (key=? key "A") (key=? key "a")) 'left]
+            [(or (key=? key "right") (key=? key "D") (key=? key "d")) 'right]
+            [else #f])]
+         [opposite
+          (lambda (d)
+            (case d
+              [(up) 'down]
+              [(down) 'up]
+              [(left) 'right]
+              [(right) 'left]
+              [else #f]))])
 
+    (cond
+      [(symbol=? dir 'none)
+       (make-world 'game (world-menu w) snake 'right (world-foods w) (world-game-over? w) (world-score w) (world-record w) (world-tick-counter w) (world-obstacles w) (world-free-spaces w) #f)]
 
-        (cond
-          [(or (key=? key "up") (key=? key "W") (key=? key "w"))
-           (if (symbol=? dir 'down) w
-               (make-world 'game
-            (world-menu w)
-            snake
-            'up
-            (world-foods w)
-            (world-game-over? w)
-            (world-score w)
-            (world-record w)
-            (world-tick-counter w)
-            (world-obstacles w)
-            (world-free-spaces w)
-            #f)
-)]
+      [(symbol=? (opposite dir) requested-dir) w]
 
-          [(or (key=? key "down") (key=? key "S") (key=? key "s"))
-           (if (symbol=? dir 'up) w
-               (make-world 'game
-            (world-menu w)
-            snake
-            'down
-            (world-foods w)
-            (world-game-over? w)
-            (world-score w)
-            (world-record w)
-            (world-tick-counter w)
-            (world-obstacles w)
-            (world-free-spaces w)
-            #f)
-)]
-
-          [(or (key=? key "left") (key=? key "A") (key=? key "a"))
-           (if (symbol=? dir 'right) w
-               (make-world 'game
-            (world-menu w)
-            snake
-            'left
-            (world-foods w)
-            (world-game-over? w)
-            (world-score w)
-            (world-record w)
-            (world-tick-counter w)
-            (world-obstacles w)
-            (world-free-spaces w)
-            #f)
-)]
- 
-          [(or (key=? key "right") (key=? key "D") (key=? key "d"))
-           (if (symbol=? dir 'left) w
-               (make-world 'game
-            (world-menu w)
-            snake
-            'right
-            (world-foods w)
-            (world-game-over? w)
-            (world-score w)
-            (world-record w)
-            (world-tick-counter w)
-            (world-obstacles w)
-            (world-free-spaces w)
-            #f)
-)]
-
-          [else w]))))
+      [else
+       (make-world 'game (world-menu w) snake requested-dir (world-foods w) (world-game-over? w) (world-score w) (world-record w) (world-tick-counter w) (world-obstacles w) (world-free-spaces w) #f)])))
 
 
 ;; active-grid-bounds : Number -> List<Number>
@@ -1010,84 +952,34 @@
     [(symbol=? (world-mode w) 'menu)
      (cond
        [(key=? key " ")
-  (let* ([menu-updated (world-menu w)]
-         [num-fruits   (menu-num-fruits menu-updated)]
-         [foods        (random-foods initial-snake '() num-fruits)]
-         [obs          (if (eq? (menu-mode menu-updated) 'Obstacles)
-                           (generate-obstacles-safe initial-snake foods)
-                           '())]
-         [size         (menu-size menu-updated)]
-         [outer        (if (< size 25) (generate-outer-obstacles size) '())]
-         [total-obstacles (append obs outer)]
-         [final-foods  (list->vector
-                        (map (lambda (f)
-                               (if (member f total-obstacles)
-                                   (vector-ref (random-foods initial-snake total-obstacles 1) 0)
-                                   f))
-                             (vector->list foods)))]
-         [free (count-free-spaces total-obstacles)])
-    (make-world
-     'game
-     menu-updated
-     initial-snake
-     initial-dir
-     final-foods
-     #f
-     0
-     (world-record w)
-     0
-     total-obstacles
-     free
-     #f))]
-       
+        (let* ([menu-updated (world-menu w)]
+               [num-fruits   (menu-num-fruits menu-updated)]
+               [foods        (random-foods initial-snake '() num-fruits)]
+               [obs          (if (eq? (menu-mode menu-updated) 'Obstacles) (generate-obstacles-safe initial-snake foods) '())]
+               [size         (menu-size menu-updated)]
+               [outer        (if (< size 25) (generate-outer-obstacles size) '())]
+               [total-obstacles (append obs outer)]
+               [final-foods  (list->vector
+                              (map (lambda (f)
+                                     (if (member f total-obstacles)
+                                         (vector-ref (random-foods initial-snake total-obstacles 1) 0)
+                                         f))
+                                   (vector->list foods)))]
+               [free (count-free-spaces total-obstacles)])
+          (make-world 'game menu-updated initial-snake initial-dir final-foods #f 0 (world-record w) 0 total-obstacles free #f))]
+
        [else
-        (make-world
-         'menu
-         (menu-key (world-menu w) key)
-         initial-snake
-         initial-dir
-         initial-foods
-         #f
-         0
-         (world-record w)
-         0
-         '()
-         0
-         #f)])]
+        (make-world 'menu (menu-key (world-menu w) key) initial-snake initial-dir initial-foods #f 0 (world-record w) 0 '() 0 #f)])]
 
     [(symbol=? (world-mode w) 'game)
      (cond
        [(and (or (eq? (world-game-over? w) #t)
                  (eq? (world-game-over? w) 'win))
              (key=? key " "))
-        (make-world
-         'menu
-         (world-menu w)
-         initial-snake
-         initial-dir
-         initial-foods
-         #f
-         0
-         (world-record w)
-         0
-         '()
-         0
-         #f)]
+        (make-world 'menu (world-menu w) initial-snake initial-dir initial-foods #f 0 (world-record w) 0 '() 0 #f)]
 
        [(or (key=? key "l") (key=? key "L"))
-        (make-world
-         'game
-         (world-menu w)
-         (world-snake w)
-         (world-dir w)
-         (world-foods w)
-         (world-game-over? w)
-         (- (world-free-spaces w) 1)
-         (world-record w)
-         (world-tick-counter w)
-         (world-obstacles w)
-         (world-free-spaces w)
-         #f)]
+        (make-world 'game (world-menu w) (world-snake w) (world-dir w) (world-foods w) (world-game-over? w) (- (world-free-spaces w) 1) (world-record w) (world-tick-counter w) (world-obstacles w) (world-free-spaces w) #f)]
 
        [else
         (handle-key-game w key)])]))
@@ -1152,16 +1044,157 @@
 ;; Update game function
 ;; =========================
 
+;; compute-new-head : World -> Posn
+;; Purpose: Computes the next head position of the snake based on the current direction
+;;          and the game mode. If the mode is 'Pacman, applies wrap-around logic;
+;;          otherwise, uses normal movement without wrapping.
+;; Termination argument: Pure function, no recursion.
+(define (compute-new-head w)
+  (let* ([head (vector-ref (world-snake w) 0)]
+         [dir  (world-dir w)])
+    (if (eq? (menu-mode (world-menu w)) 'Pacman)
+        (wrap-head (move-head head dir) (menu-size (world-menu w)))
+        (move-head head dir))))
+
+;; snake-ate? : Posn Vector<Posn> -> (or/c Number #f)
+;; Purpose: Determines whether the snake's new head position matches any food position.
+;;          Returns the index of the eaten food, or #f if none was eaten.
+;; Termination argument: Delegates to vector-index, which is finite and terminating.
+(define (snake-ate? new-head foods)
+  (vector-index (λ (f) (equal? f new-head)) foods))
+
+;; handle-eat : World Posn Number -> World
+;; Purpose: Handles the full sequence of events that occur when the snake eats food:
+;;          - Increase score and update record
+;;          - Generate new food safely
+;;          - Grow the snake by adding the new head
+;;          - Determine whether the player has won (snake fills all free spaces)
+;;          - Construct and return the updated world
+;; Termination argument: Pure construction of new world values, no recursion.
+(define (handle-eat w new-head ate-index)
+  (let* ([snake       (vector->list (world-snake w))]
+         [new-snake   (cons new-head snake)]
+         [foods       (world-foods w)]
+         [score       (world-score w)]
+         [record      (world-record w)]
+         [obstacles   (world-obstacles w)]
+         [new-score   (add1 score)]
+         [new-record  (max record new-score)]
+         [new-food    (vector-ref (random-foods (list->vector new-snake)
+                                                obstacles
+                                                1)
+                                  0)]
+         [new-foods   (replace-food-at-index foods ate-index new-food)]
+         [win?        (= new-score (world-free-spaces w))])
+
+    (make-world
+     'game
+     (world-menu w)
+     (list->vector new-snake)
+     (world-dir w)
+     new-foods
+     (if win? 'win #f)
+     new-score
+     new-record
+     0
+     obstacles
+     (world-free-spaces w)
+     #f)))
+
+;; shrink-snake : List<Posn> -> List<Posn>
+;; Purpose: Removes the last element (tail) from the snake, keeping size constant.
+;; Termination argument: Single-pass list operations, always terminates.
+(define (shrink-snake lst)
+  (reverse (rest (reverse lst))))
+
+;; collision? : World Posn Vector<Posn> -> Boolean
+;; Purpose: Determines whether the new head position results in a collision with
+;;          walls (if not Pacman), the snake body, or obstacles.
+;; Termination argument: Pure boolean logic, finite member checks.
+(define (collision? w new-head shrunk)
+  (or (and (not (eq? (menu-mode (world-menu w)) 'Pacman))
+           (wall-collision? new-head))
+      (self-collision? new-head (list->vector shrunk))
+      (obstacle-collision? new-head (world-obstacles w))
+      (not (eq? (vector-index (λ (f) (equal? f new-head))
+                              (world-foods w))
+                #f))))
+
+;; handle-move : World Posn -> World
+;; Purpose: Handles normal movement (no food eaten). It shrinks the snake and
+;;          checks for collisions. If any collision occurs, produces a game-over world.
+;; Termination argument: Pure world construction, no recursion.
+(define (handle-move w new-head)
+  (let* ([snake-list (vector->list (world-snake w))]
+         [new-snake  (cons new-head snake-list)]
+         [shrunk     (shrink-snake new-snake)]
+         [foods      (world-foods w)]
+         [score      (world-score w)]
+         [record     (world-record w)]
+         [obs        (world-obstacles w)])
+    (if (collision? w new-head shrunk)
+        (make-world 'game
+                    (world-menu w)
+                    (world-snake w)
+                    (world-dir w)
+                    foods
+                    #t
+                    score
+                    record
+                    0
+                    obs
+                    (world-free-spaces w)
+                    #f)
+        (make-world 'game
+                    (world-menu w)
+                    (list->vector shrunk)
+                    (world-dir w)
+                    foods
+                    #f
+                    score
+                    record
+                    0
+                    obs
+                    (world-free-spaces w)
+                    #f))))
+
+;; tick-ready? : World -> Boolean
+;; Purpose: Determines whether enough time has passed (based on menu speed) for
+;;          the game to advance one snake movement step.
+;; Termination argument: Pure arithmetic, no recursion.
+(define (tick-ready? w)
+  (let* ([speed     (menu-speed (world-menu w))]
+         [counter   (world-tick-counter w)]
+         [threshold (inexact->exact (round (/ speed 0.02)))])
+    (>= counter threshold)))
+
+;; increment-tick : World -> World
+;; Purpose: Increments the world's tick counter when the game is not yet ready
+;;          for a full movement update.
+;; Termination argument: Pure structure update.
+(define (increment-tick w)
+  (make-world 'game
+              (world-menu w)
+              (world-snake w)
+              (world-dir w)
+              (world-foods w)
+              #f
+              (world-score w)
+              (world-record w)
+              (add1 (world-tick-counter w))
+              (world-obstacles w)
+              (world-free-spaces w)
+              #f))
 
 ;; update-game : World -> World
-;; Purpose: The main tick function for the game. It advances the game state based on the configured speed.
-;;          1. Game Over Check: If the game is already over ('win' or #t), it returns the current world unchanged.
-;;          2. Pause Check: If the snake's direction is 'none' (paused), it returns the current world unchanged.
-;;          3. Speed Control (Tick Counting): It uses a counter (`world-tick-counter`) and a speed threshold derived from `menu-speed` to determine if a full game step should occur. If the counter is below the threshold, it just increments the counter and returns the world.
-;;          4. Movement: If the threshold is met, it calculates the `new-head` position, applying wrap-around logic (`wrap-head`) if the mode is 'Pacman'.
-;;          5. Food Consumption: It checks for food collision (`ate-index`). If food is eaten, it generates a new food item, increases the score, updates the record, grows the snake, and checks for a win condition (snake fills all free spaces).
-;;          6. Collision Check: If no food is eaten, it checks for collisions: wall (if not Pacman mode), self-collision, or obstacle collision. If any collision occurs, it sets the `world-game-over?` flag to #t.
-;;          7. Normal Move: If no collision and no food is eaten, it moves the snake by dropping the tail, keeping the length the same.
+;; Purpose: Advances the game by one tick, using modular helper functions for:
+;;          - Tick timing
+;;          - New head computation
+;;          - Eating logic
+;;          - Collision handling
+;;          - Movement without eating
+;; Termination argument: The wrapper itself contains no recursion; all helpers
+;;                       are pure and terminating.
 (define (update-game w)
   (cond
     [(or (eq? (world-game-over? w) #t)
@@ -1171,103 +1204,17 @@
     [(symbol=? (world-dir w) 'none)
      w]
 
-    [else
-     (let* ([speed     (menu-speed (world-menu w))]
-            [counter   (world-tick-counter w)]
-            [threshold (inexact->exact (round (/ speed 0.02)))])
-       
-       (if (< counter threshold)
-           (make-world 'game
-                       (world-menu w)
-                       (world-snake w)
-                       (world-dir w)
-                       (world-foods w)
-                       #f
-                       (world-score w)
-                       (world-record w)
-                       (add1 counter)
-                       (world-obstacles w)
-                       (world-free-spaces w)
-                       #f)
-           
-           (let* ([snake      (world-snake w)]
-                  [dir        (world-dir w)]
-                  [foods      (world-foods w)]
-                  [score      (world-score w)]
-                  [record     (world-record w)]
-                  [head       (vector-ref snake 0)]
-                  [new-head (if (eq? (menu-mode (world-menu w)) 'Pacman)
-              (wrap-head (move-head head dir)
-                         (menu-size (world-menu w)))
-              (move-head head dir))]
+    [(not (tick-ready? w))
+     (increment-tick w)]
 
-                  [snake-list (vector->list snake)]
-                  [new-snake  (cons new-head snake-list)]
-                  [ate-index (vector-index (lambda (f) (equal? new-head f)) foods)])
-             
-             (if (not (eq? ate-index #f))
-    (let* ([new-score  (+ score 1)]
-           [new-record (max record new-score)]
-           [new-food   (vector-ref (random-foods (list->vector new-snake)
-                                                 (world-obstacles w) 1) 0)]
-           [new-foods  (replace-food-at-index foods ate-index new-food)]
-           [win?       (= new-score (world-free-spaces w))])
-      (if win?
-          (make-world 'game
-                      (world-menu w)
-                      (list->vector new-snake)
-                      dir
-                      new-foods
-                      'win
-                      new-score
-                      new-record
-                      0
-                      (world-obstacles w)
-                      (world-free-spaces w)
-                      #f)
-          (make-world 'game
-                      (world-menu w)
-                      (list->vector new-snake)
-                      dir
-                      new-foods
-                      #f
-                      new-score
-                      new-record
-                      0
-                      (world-obstacles w)
-                      (world-free-spaces w)
-                      #f)))
-    (let ([shrunk (reverse (rest (reverse new-snake)))])
-      (if (or (and (not (eq? (menu-mode (world-menu w)) 'Pacman))
-                   (wall-collision? new-head))
-              (self-collision? new-head (list->vector shrunk))
-              (obstacle-collision? new-head (world-obstacles w))
-              (not (eq? (vector-index (lambda (f) (equal? f new-head)) foods) #f)))
-          (make-world 'game
-                      (world-menu w)
-                      snake
-                      dir
-                      foods
-                      #t
-                      score
-                      record
-                      0
-                      (world-obstacles w)
-                      (world-free-spaces w)
-                      #f)
-          (make-world 'game
-                      (world-menu w)
-                      (list->vector shrunk)
-                      dir
-                      foods
-                      #f
-                      score
-                      record
-                      0
-                      (world-obstacles w)
-                      (world-free-spaces w)
-                      #f))))
-)))]))
+    [else
+     (let* ([foods      (world-foods w)]
+            [new-head   (compute-new-head w)]
+            [ate-index  (snake-ate? new-head foods)])
+       (if (not (eq? ate-index #f))
+           (handle-eat w new-head ate-index)
+           (handle-move w new-head)))]))
+
 
 
 
@@ -1292,50 +1239,27 @@
 ;; Termination argument: This function is non-recursive and terminates after a fixed series of conditional checks and structure creation operations. The coordinate and boundary calculations are direct arithmetic operations.
 (define (handle-mouse-unified w x y event)
   (cond
-[(and (symbol=? (world-mode w) 'game)
-      (string=? event "button-down")
-      (let* ([center-x (/ SCENE-WIDTH 2)]
-             [button-spacing 10]
-             [restart-x (- center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
-             [restart-left (- restart-x (/ BUTTON-WIDTH 2))]
-             [restart-right (+ restart-x (/ BUTTON-WIDTH 2))])
-        (and (>= x restart-left) (<= x restart-right)
-             (>= y 0) (<= y BUTTON-HEIGHT))))
- (make-world 'menu
-             (world-menu w)
-             initial-snake
-             initial-dir
-             initial-foods
-             #f
-             0
-             (world-record w)
-             0
-             '()
-             (count-free-spaces '())
-             #f)]
+    [(and (symbol=? (world-mode w) 'game)
+          (string=? event "button-down")
+          (let* ([center-x (/ SCENE-WIDTH 2)]
+                 [button-spacing 10]
+                 [restart-x (- center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
+                 [restart-left (- restart-x (/ BUTTON-WIDTH 2))]
+                 [restart-right (+ restart-x (/ BUTTON-WIDTH 2))])
+            (and (>= x restart-left) (<= x restart-right)
+                 (>= y 0) (<= y BUTTON-HEIGHT))))
+     (make-world 'menu (world-menu w) initial-snake initial-dir initial-foods #f 0 (world-record w) 0 '() (count-free-spaces '()) #f)]
 
-[(and (symbol=? (world-mode w) 'game)
-      (string=? event "button-down")
-      (let* ([center-x (/ SCENE-WIDTH 2)]
-             [button-spacing 10]
-             [pause-x (+ center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
-             [pause-left (- pause-x (/ BUTTON-WIDTH 2))]
-             [pause-right (+ pause-x (/ BUTTON-WIDTH 2))])
-        (and (>= x pause-left) (<= x pause-right)
-             (>= y 0) (<= y BUTTON-HEIGHT))))
- (make-world 'game
-             (world-menu w)
-             (world-snake w)
-             (world-dir w)
-             (world-foods w)
-             (world-game-over? w)
-             (world-score w)
-             (world-record w)
-             (world-tick-counter w)
-             (world-obstacles w)
-             (world-free-spaces w)
-             (not (world-paused? w)))]
-
+    [(and (symbol=? (world-mode w) 'game)
+          (string=? event "button-down")
+          (let* ([center-x (/ SCENE-WIDTH 2)]
+                 [button-spacing 10]
+                 [pause-x (+ center-x (/ BUTTON-WIDTH 2) (/ button-spacing 2))]
+                 [pause-left (- pause-x (/ BUTTON-WIDTH 2))]
+                 [pause-right (+ pause-x (/ BUTTON-WIDTH 2))])
+            (and (>= x pause-left) (<= x pause-right)
+                 (>= y 0) (<= y BUTTON-HEIGHT))))
+     (make-world 'game (world-menu w) (world-snake w) (world-dir w) (world-foods w) (world-game-over? w) (world-score w) (world-record w) (world-tick-counter w) (world-obstacles w) (world-free-spaces w) (not (world-paused? w)))]
 
     [else w]))
 
