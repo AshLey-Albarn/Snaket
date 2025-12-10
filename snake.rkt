@@ -156,8 +156,7 @@
 ;; Termination argument: the loop increments i each step and stops at vector-length of snake
 (define (self-collision? head snake)
   (let loop ([i 1])
-    (if (>= i (vector-length snake))
-        #f
+    (if (>= i (vector-length snake)) #f
         (or (equal? head (vector-ref snake i))
             (loop (add1 i))))))
 
@@ -324,8 +323,7 @@
 ;; cell-center : Number -> Number
 ;; Purpose: Given a grid cell index, returns the pixel coordinate of its center
 (define (cell-center n)
-  (+ (* (sub1 n) CELL-SIZE)
-     (/ CELL-SIZE 2)))
+  (+ (* (sub1 n) CELL-SIZE) (/ CELL-SIZE 2)))
 (check-expect (cell-center 1) 10)
 (check-expect (cell-center 3) 50)
 (check-expect (cell-center 10) 190)
@@ -334,7 +332,7 @@
 ;; draw-obstacles : List<Posn> Number Image -> Image
 ;; Purpose: Draws all obstacles onto the scene. Every obstacle is drawn using the OBSTACLE graphic.
 ;; Termination argument: The function uses foldl, which iterates exactly once over every element in the input list `obstacles`.
-(define (draw-obstacles obstacles menu-size scene)
+(define (draw-obstacles obstacles scene)
   (foldl (lambda (p s)
            (place-image OBSTACLE
                         (cell-center (posn-x p))
@@ -369,6 +367,7 @@
                           (cell-center (posn-y cur))
                           scene)])
        (draw-tail cur (rest tail) new-scene color))]))
+
 
 ;; draw-snake : Vector<Posn> Symbol Image Color -> Image
 ;; Purpose: Draws the entire snake onto the scene. It converts the snake position vector to a list,
@@ -436,28 +435,13 @@
       (place-image record-text record-x (/ TOP-BORDER-SIZE 2) buttons-scene))))
 
 
-
-;; draw-pause-button : Boolean Image -> Image
-;; Purpose: Creates and places the Pause/Resume button in the score bar area of the game scene. The button's label changes dynamically based on the current `paused?` state.
-;; Termination argument: This function is non-recursive and terminates after a fixed number of image composition operations.
-(define (draw-pause-button paused? scene)
-  (let* ([button-bg (rectangle BUTTON-WIDTH BUTTON-HEIGHT "solid" "gray")]
-         [label (if paused? "Resume" "Pause")]
-         [button-label (text label 16 "black")]
-         [button (overlay button-label button-bg)]
-         [x (+ (/ SCENE-WIDTH 2) BUTTON-WIDTH 1)]
-         [y (/ TOP-BORDER-SIZE 2)])
-    (place-image button x y scene)))
-
-
 ;; render-game : World -> Image
 ;; Purpose: Renders the complete game visual state. It layers the grid, obstacles, snake, and food onto the game board, creates the top score bar, and assembles the final scene with borders.
-;; Termination argument: This function is non-recursive and executes a fixed sequence of image composition calls.
 (define (render-game w)
   (let* ([color (menu-color (world-menu w))] 
          [inner-scene (rectangle SCENE-WIDTH SCENE-HEIGHT "solid" "lightblue")]
          [grid-scene (draw-grid inner-scene)]
-         [scene-with-obstacles (draw-obstacles (world-obstacles w) (menu-size (world-menu w)) grid-scene)]
+         [scene-with-obstacles (draw-obstacles (world-obstacles w) grid-scene)]
          [scene-with-snake (draw-snake (world-snake w) (world-dir w) scene-with-obstacles color)]
          [scene-with-food (draw-foods (world-foods w) scene-with-snake)]
          [score-bar (create-score-bar (world-score w) (world-record w) (world-paused? w))]
@@ -478,7 +462,6 @@
 ;; render-menu : Menu -> Image
 ;; Purpose: Renders the main menu screen, displaying the game title, control instructions, and configurable settings (Speed, Mode, Size, Color, Fruits).
 ;; It highlights the currently selected option (indicated by `menu-selector`) with a ">>" prefix and yellow text color.
-;; Termination argument: This function is non-recursive and executes a fixed sequence of image composition operations.
 (define (render-menu m)
   (let* ([sel (menu-selector m)]
          [cx (/ TOTAL-WIDTH 2)]
@@ -528,9 +511,6 @@
 
 
 
-
-
-
 ;; ======================
 ;; Key Handlers
 ;; ======================
@@ -542,17 +522,21 @@
 ;; Termination argument: The function recursively calls itself with `(rest lst)`,
 ;; strictly reducing the length of the list by 1 at each step. Since the list is finite, it eventually becomes empty, triggering the base case.
 (define (next-in-list lst x)
-  (cond
-    [(empty? lst) x]
-    [(equal? (first lst) x)
-     (if (empty? (rest lst))
-         (first lst)
-         (first (rest lst)))]
-    [else
-     (next-in-list (rest lst) x)]))
+  (letrec ([helper (lambda (lst original)
+                     (cond
+                       [(empty? lst) x]
+                       [(equal? (first lst) x)
+                        (if (empty? (rest lst))
+                            (first original)
+                            (first (rest lst)))]
+                       [else
+                        (helper (rest lst) original)]))])
+    (helper lst lst)))
+
+
 (check-expect (next-in-list '() 5) 5)
 (check-expect (next-in-list '(1 2 3) 2) 3)
-(check-expect (next-in-list '(1 2 3) 3) 3)
+(check-expect (next-in-list '(1 2 3) 3) 1)
 (check-expect (next-in-list '(4 5 6) 7) 7)
 (check-expect (next-in-list '(1 2 2 3) 2) 2)
 
@@ -611,20 +595,10 @@
     
     (cond
       [(member key '("w" "W"))
-       (make-menu (menu-speed m)
-                  (menu-mode m)
-                  (menu-color m)
-                  (menu-size m)
-                  (prev-in-list selectors sel)
-                  (menu-num-fruits m))]
+       (make-menu (menu-speed m) (menu-mode m) (menu-color m) (menu-size m) (prev-in-list selectors sel) (menu-num-fruits m))]
 
       [(member key '("s" "S"))
-       (make-menu (menu-speed m)
-                  (menu-mode m)
-                  (menu-color m)
-                  (menu-size m)
-                  (next-in-list selectors sel)
-                  (menu-num-fruits m))]
+       (make-menu (menu-speed m) (menu-mode m) (menu-color m) (menu-size m) (next-in-list selectors sel) (menu-num-fruits m))]
 
       
   [(or (string=? key "a") (string=? key "A"))
@@ -689,72 +663,14 @@
 ;; Purpose: Calculates the grid boundaries (min X, max X, min Y, max Y) for the active, central play area based on the desired `size` of the inner square grid.
 ;;          The resulting active area is centered within the total grid defined by CELL-NUM-WIDTH/HEIGHT.
 (define (active-grid-bounds size)
-  (let* ([offset (quotient (- CELL-NUM-WIDTH size) 2)]
+  (let* ([offset (/ (- CELL-NUM-WIDTH size) 2)]
          [min-cell (+ offset 1)]
          [max-cell (- CELL-NUM-WIDTH offset)])
     (list min-cell max-cell min-cell max-cell)))
 (check-expect (active-grid-bounds 24) (list 1 24 1 24))
-(check-expect (active-grid-bounds 1)  (list 12 13 12 13))
+(check-expect (active-grid-bounds 1)  (list 12.5 12.5 12.5 12.5))
 (check-expect (active-grid-bounds 10) (list 8 17 8 17))
 
-
-
-;; wrap-head : Posn Number -> Posn
-;; Purpose: Takes a potential snake head position (`head`) and a game grid `size`, and applies wrap-around logic.
-;;          If the head moves outside the active playing area boundaries (determined by `active-grid-bounds`), it is repositioned to the corresponding cell on the opposite side of the active area.
-;; Termination argument: This function is non-recursive and terminates after a fixed set of coordinate checks and arithmetic operations.
-(define (wrap-head head size)
-  (local
-    ((define (extract-bounds lst)
-       (let ([min-x (first lst)]
-             [max-x (first (rest lst))]
-             [min-y (first (rest (rest lst)))]
-             [max-y (first (rest (rest (rest lst))))])
-         (list min-x max-x min-y max-y))))
-    (let* ([bounds (extract-bounds (active-grid-bounds size))]
-           [min-x (first bounds)]
-           [max-x (second bounds)]
-           [min-y (third bounds)]
-           [max-y (fourth bounds)]
-           [x (posn-x head)]
-           [y (posn-y head)])
-      (make-posn
-       (cond [(< x min-x) max-x]
-             [(> x max-x) min-x]
-             [else x])
-       (cond [(< y min-y) max-y]
-             [(> y max-y) min-y]
-             [else y])))))
-(check-expect (wrap-head (make-posn 1 1) 24) (make-posn 1 1))
-(check-expect (wrap-head (make-posn 0 0) 24) (make-posn 24 24))
-(check-expect (wrap-head (make-posn 25 25) 24) (make-posn 1 1))
-(check-expect (wrap-head (make-posn 12 5) 10) (make-posn 12 17))
-(check-expect (wrap-head (make-posn 7 17) 10) (make-posn 17 17))
-
-
-
-;; valid-position? : Posn Vector<Posn> Posn List<Posn> -> Boolean
-;; Purpose: Checks if a given position `p` is a valid and unoccupied cell within the game grid boundaries. 
-;;          A position is valid if it is within the grid (1 to CELL-NUM-WIDTH/HEIGHT, inclusive) and does not coincide with any existing obstacles, the single food item, or any segment of the snake's body.
-;; Termination argument: The function contains a local recursive loop (`loop`) that iterates over the `snake` vector.
-;; The counter `i` starts at 0 and increments by 1 in each recursive call, ensuring termination when $i$ reaches the length of the vector.
-(define (valid-position? p snake food obstacles)
-  (and (>= (posn-x p) 1) (<= (posn-x p) CELL-NUM-WIDTH)
-       (>= (posn-y p) 1) (<= (posn-y p) CELL-NUM-HEIGHT)
-       (not (member p obstacles))
-       (not (equal? p food))
-       (let loop ([i 0])
-         (if (>= i (vector-length snake))
-             #t
-             (if (equal? p (vector-ref snake i))
-                 #f
-                 (loop (add1 i)))))))
-(check-expect (valid-position? (make-posn 5 5) (vector) (make-posn 10 10) '()) #t)
-(check-expect (valid-position? (make-posn 0 5) (vector) (make-posn 10 10) '()) #f)
-(check-expect (valid-position? (make-posn 25 5) (vector) (make-posn 10 10) '()) #f)
-(check-expect (valid-position? (make-posn 5 5) (vector (make-posn 5 5)) (make-posn 10 10) '()) #f)
-(check-expect (valid-position? (make-posn 5 5) (vector) (make-posn 5 5) '()) #f)
-(check-expect (valid-position? (make-posn 5 5) (vector) (make-posn 10 10) (list (make-posn 5 5))) #f)
 
 
 ;; free-neighbors : Posn Vector<Posn> List<Posn> -> Number
@@ -767,14 +683,14 @@
                     (make-posn (+ (posn-x p) 1) (posn-y p))
                     (make-posn (posn-x p) (- (posn-y p) 1))
                     (make-posn (posn-x p) (+ (posn-y p) 1)))])
-    (foldl (lambda (n acc)
+    (foldl
+     (lambda (n acc)
              (if (and (>= (posn-x n) 1) (<= (posn-x n) CELL-NUM-WIDTH)
                       (>= (posn-y n) 1) (<= (posn-y n) CELL-NUM-HEIGHT)
                       (not (member n obstacles))
                       (not (equal? n (vector-ref snake 0))))
-                 (+ acc 1)
-                 acc))
-           0 neighbors)))
+                 (+ acc 1) acc))
+     0 neighbors)))
 (check-expect (free-neighbors (make-posn 5 5) (vector (make-posn 0 0)) '()) 4)
 (check-expect (free-neighbors (make-posn 1 1) (vector (make-posn 0 0)) '()) 2)
 (check-expect (free-neighbors (make-posn 24 24) (vector (make-posn 0 0)) '()) 2)
@@ -782,75 +698,8 @@
 (check-expect (free-neighbors (make-posn 5 5) (vector (make-posn 0 0)) (list (make-posn 5 6) (make-posn 4 5))) 2)
 
 
-;; safe-to-place? : Posn List<Posn> Vector<Posn> Posn -> Boolean
-;; Purpose: Determines if a food item can be placed safely at position `p`. This check ensures:
-;;          1. `p` is within grid bounds.
-;;          2. `p` is not an obstacle.
-;;          3. `p` is not occupied by the snake (body or head).
-;;          4. `p` is not directly in front of the snake's head (preventing immediate food collection).
-;;          5. Placing food at `p` does not immediately isolate any neighboring cells, ensuring the snake can still navigate and avoiding trivial win states (Dead-End Detection using `free-neighbors`).
-;; Termination argument: The function contains a local recursive loop (`loop`) that iterates over the `snake` vector, strictly reducing the index `i` towards the vector's length.
-;; The second check uses `foldl`, which iterates over a fixed 4-element list of neighbors, guaranteeing termination.
-(define (safe-to-place? p obstacles snake head)
-  (let ([front-cells (list (make-posn (+ 1 (posn-x head)) (posn-y head))
-                           (make-posn (+ 2 (posn-x head)) (posn-y head)))])
-    (and (>= (posn-x p) 1) (<= (posn-x p) CELL-NUM-WIDTH)
-         (>= (posn-y p) 1) (<= (posn-y p) CELL-NUM-HEIGHT)
-         (not (member p obstacles))
-         (not (member p front-cells))
-         (let loop ([i 0])
-           (if (>= i (vector-length snake))
-               #t
-               (if (equal? (vector-ref snake i) p)
-                   #f
-                   (loop (add1 i)))))
-         (let ([neighbors (list
-                           (make-posn (- (posn-x p) 1) (posn-y p))
-                           (make-posn (+ (posn-x p) 1) (posn-y p))
-                           (make-posn (posn-x p) (- (posn-y p) 1))
-                           (make-posn (posn-x p) (+ (posn-y p) 1)))])
-           (foldl (lambda (n acc)
-                    (and acc
-                         (or (member n obstacles)
-                             (>= (- (free-neighbors n snake (cons p obstacles)) 1) 2))))
-                  #t
-                  neighbors)))))
-(check-expect (safe-to-place? (make-posn 5 5) '() (vector (make-posn 1 1)) (make-posn 1 1)) #t)
-(check-expect (safe-to-place? (make-posn 0 0) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
-(check-expect (safe-to-place? (make-posn 25 25) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
-(check-expect (safe-to-place? (make-posn 2 1) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
-(check-expect (safe-to-place? (make-posn 5 5) (list (make-posn 5 6)) (vector (make-posn 1 1)) (make-posn 1 1)) #t)
-
-
-;; check-obstacle-conditions : List<Posn> Vector<Posn> Posn -> Boolean
-;; Purpose: Iterates through every cell in the grid (from (1, 1) to (CELL-NUM-WIDTH, CELL-NUM-HEIGHT)) to ensure that the current placement of obstacles does not create an immediate dead-end for the snake.
-;;          A cell that is not an obstacle must have at least two free neighbors (excluding the snake's head). If any non-obstacle cell fails this check, the function returns #f.
-;; Termination argument: The function uses a nested recursive loop structure (`loop` with variables `x` and `y`) that iterates systematically through every cell in the W x H grid.
-;; Since W and H are fixed constants, the loop will eventually complete when y exceeds CELL-NUM-HEIGHT, guaranteeing termination.
-(define (check-obstacle-conditions obstacles snake food)
-  (let loop ([x 1] [y 1])
-    (if (> y CELL-NUM-HEIGHT)
-        #t
-        (let ([pos (make-posn x y)])
-          (if (member pos obstacles)
-              (if (< x CELL-NUM-WIDTH)
-                  (loop (+ x 1) y)
-                  (loop 1 (+ y 1)))
-              (if (< (free-neighbors pos snake obstacles) 2)
-                  #f
-                  (if (< x CELL-NUM-WIDTH)
-                      (loop (+ x 1) y)
-                      (loop 1 (+ y 1)))))))))
-(check-expect (check-obstacle-conditions '() (vector (make-posn 0 0)) (make-posn 5 5)) #t)
-(check-expect (check-obstacle-conditions (list (make-posn 1 1)) (vector (make-posn 0 0)) (make-posn 5 5)) #t)
-(check-expect (check-obstacle-conditions (list (make-posn 1 1) (make-posn 1 2) (make-posn 2 1) (make-posn 2 2)) (vector (make-posn 0 0)) (make-posn 5 5)) #t)
-(check-expect (check-obstacle-conditions '() (vector (make-posn 1 1) (make-posn 2 2)) (make-posn 5 5)) #t)
-(check-expect (check-obstacle-conditions (list (make-posn 12 12)) (vector (make-posn 0 0)) (make-posn 5 5)) #t)
-
-
-
 ;; all-reachable? : Vector<Posn> Posn List<Posn> -> Boolean
-;; Purpose: Checks for **board segmentation** by determining if every non-obstacle cell in the grid is reachable from the snake's current head position. This is achieved by running a Breadth-First Search (BFS) starting at the snake's head.
+;; Purpose: Checks for board segmentation by determining if every non-obstacle cell in the grid is reachable from the snake's current head position. This is achieved by running a Breadth-First Search (BFS) starting at the snake's head.
 ;;          If, after the search completes, any non-obstacle cell remains unvisited, it means the board is split into isolated sections, and the function returns #f.
 ;; Termination argument: The function uses two recursive loops:
 ;;          1. `loop-bfs`: This is a classic BFS algorithm. Since the number of nodes (grid cells) is finite, the search must eventually visit all reachable nodes, and the queue will become empty, guaranteeing termination.
@@ -895,6 +744,45 @@
 (check-expect (all-reachable? (vector (make-posn 1 1)) (make-posn 5 5) (list (make-posn 2 1) (make-posn 1 2))) #f)
 (check-expect (all-reachable? (vector (make-posn 5 5)) (make-posn 10 10) (list (make-posn 1 1) (make-posn 1 2))) #t)
 
+
+;; safe-to-place? : Posn List<Posn> Vector<Posn> Posn -> Boolean
+;; Purpose: Determines if a food item can be placed safely at position `p`. This check ensures:
+;;          1. `p` is within grid bounds.
+;;          2. `p` is not an obstacle.
+;;          3. `p` is not occupied by the snake (body or head).
+;;          4. `p` is not directly in front of the snake's head (preventing immediate food collection).
+;;          5. Placing food at `p` does not immediately isolate any neighboring cells, ensuring the snake can still navigate and avoiding trivial win states (Dead-End Detection using `free-neighbors`).
+;; Termination argument: The function contains a local recursive loop (`loop`) that iterates over the `snake` vector, strictly reducing the index `i` towards the vector's length.
+;; The second check uses `foldl`, which iterates over a fixed 4-element list of neighbors, guaranteeing termination.
+(define (safe-to-place? p obstacles snake head)
+  (let ([front-cells (list (make-posn (+ 1 (posn-x head)) (posn-y head))
+                           (make-posn (+ 2 (posn-x head)) (posn-y head)))])
+    (and (>= (posn-x p) 1) (<= (posn-x p) CELL-NUM-WIDTH)
+         (>= (posn-y p) 1) (<= (posn-y p) CELL-NUM-HEIGHT)
+         (not (member p obstacles))
+         (not (member p front-cells))
+         (let loop ([i 0])
+           (if (>= i (vector-length snake))
+               #t
+               (if (equal? (vector-ref snake i) p)
+                   #f
+                   (loop (add1 i)))))
+         (let ([neighbors (list
+                           (make-posn (- (posn-x p) 1) (posn-y p))
+                           (make-posn (+ (posn-x p) 1) (posn-y p))
+                           (make-posn (posn-x p) (- (posn-y p) 1))
+                           (make-posn (posn-x p) (+ (posn-y p) 1)))])
+           (foldl (lambda (n acc)
+                    (and acc
+                         (or (member n obstacles)
+                             (>= (- (free-neighbors n snake (cons p obstacles)) 1) 2))))
+                  #t
+                  neighbors)))))
+(check-expect (safe-to-place? (make-posn 5 5) '() (vector (make-posn 1 1)) (make-posn 1 1)) #t)
+(check-expect (safe-to-place? (make-posn 0 0) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
+(check-expect (safe-to-place? (make-posn 25 25) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
+(check-expect (safe-to-place? (make-posn 2 1) '() (vector (make-posn 1 1)) (make-posn 1 1)) #f)
+(check-expect (safe-to-place? (make-posn 5 5) (list (make-posn 5 6)) (vector (make-posn 1 1)) (make-posn 1 1)) #t)
 
 ;; generate-obstacles-safe : Vector<Posn> Posn -> List<Posn>
 ;; Purpose: Generates a list of obstacle positions ensuring that the placement is safe and does not immediately partition the game board or block the snake's path.
@@ -1040,6 +928,33 @@
 ;; Update game function
 ;; =========================
 
+;; wrap-head : Posn Number -> Posn
+;; Purpose: Takes a potential snake head position (`head`) and a game grid `size`, and applies wrap-around logic.
+;;          If the head moves outside the active playing area boundaries (determined by `active-grid-bounds`), it is repositioned to the corresponding cell on the opposite side of the active area.
+;; Termination argument: This function is non-recursive and terminates after a fixed set of coordinate checks and arithmetic operations.
+(define (wrap-head head size)
+  (let* ([bounds (active-grid-bounds size)]
+         [min-x (first bounds)]
+         [max-x (second bounds)]
+         [min-y (third bounds)]
+         [max-y (fourth bounds)]
+         [x (posn-x head)]
+         [y (posn-y head)])
+    (make-posn
+     (cond [(< x min-x) max-x]
+           [(> x max-x) min-x]
+           [else x])
+     (cond [(< y min-y) max-y]
+           [(> y max-y) min-y]
+           [else y]))))
+
+(check-expect (wrap-head (make-posn 1 1) 24) (make-posn 1 1))
+(check-expect (wrap-head (make-posn 0 0) 24) (make-posn 24 24))
+(check-expect (wrap-head (make-posn 25 25) 24) (make-posn 1 1))
+(check-expect (wrap-head (make-posn 12 5) 10) (make-posn 12 17))
+(check-expect (wrap-head (make-posn 7 17) 10) (make-posn 17 17))
+
+
 ;; compute-new-head : World -> Posn
 ;; Purpose: Computes the next head position of the snake based on the current direction
 ;;          and the game mode. If the mode is 'Pacman, applies wrap-around logic;
@@ -1051,6 +966,7 @@
     (if (eq? (menu-mode (world-menu w)) 'Pacman)
         (wrap-head (move-head head dir) (menu-size (world-menu w)))
         (move-head head dir))))
+
 
 ;; snake-ate? : Posn Vector<Posn> -> (or/c Number #f)
 ;; Purpose: Determines whether the snake's new head position matches any food position.
